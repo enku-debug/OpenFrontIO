@@ -58,8 +58,8 @@ export class DesktopNavBar extends LitElement {
           <div class="h-8">
             <img
               class="block h-full aspect-[1364/259]"
-              src=${assetUrl("images/OpenFrontLogo.svg")}
-              alt="OpenFront"
+              src=${assetUrl("images/WW3Logo.svg")}
+              alt="WW3"
             />
           </div>
           <div

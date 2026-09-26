@@ -293,7 +293,9 @@ export class LangSelector extends LitElement {
       "tutorial-panel",
     ];
 
-    document.title = this.translateText("main.title") ?? document.title;
+    // The tab title is the game's name ("WW3", set in index.html). It is a
+    // brand name, so it stays the same in every language instead of being
+    // replaced by the translated "main.title" string.
 
     document.querySelectorAll("[data-i18n]").forEach((element) => {
       const key = element.getAttribute("data-i18n");

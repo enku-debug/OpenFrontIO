@@ -20,12 +20,13 @@ afterEach(() => {
 describe("LangSelector applyTranslation", () => {
   it("writes resolved data-i18n keys and skips unresolvable ones", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    document.title = "WW3";
     document.body.innerHTML = `
       <span data-i18n="test.hello"></span>
       <span data-i18n="test.bogus">untouched</span>
     `;
     const selector = makeSelector({
-      "main.title": "OpenFront",
+      "main.title": "Translated Title",
       "test.hello": "Hello",
       // Malformed map value: translateText hands it back as null, which the
       // loop must skip with a warning instead of blanking the node.
@@ -41,7 +42,8 @@ describe("LangSelector applyTranslation", () => {
       document.querySelector('[data-i18n="test.bogus"]')!.textContent,
     ).toBe("untouched");
     expect(warn).toHaveBeenCalledWith("Translation key not found: test.bogus");
-    expect(document.title).toBe("OpenFront");
+    // The tab title is the fixed game name, never replaced by a translation.
+    expect(document.title).toBe("WW3");
   });
 });
 

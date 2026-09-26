@@ -86,8 +86,8 @@ export class MobileNavBar extends LitElement {
         >
           <div class="flex flex-col items-center gap-1">
             <img
-              src=${assetUrl("images/OpenFrontLogo.svg")}
-              alt="OpenFront"
+              src=${assetUrl("images/WW3Logo.svg")}
+              alt="WW3"
               class="w-auto h-auto max-w-[220px] max-h-[4.5rem]"
             />
             <div
