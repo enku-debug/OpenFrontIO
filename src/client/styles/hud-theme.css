@@ -1,0 +1,286 @@
+/*
+ * ============================================================================
+ *  HUD THEME — one file that styles the whole in-game HUD
+ * ============================================================================
+ *
+ *  To restyle the HUD, change the values in the ":root" block right below and
+ *  save. With `npm run dev` running, the game updates instantly (no reload).
+ *
+ *  To get the original look back, delete the line
+ *      import "./styles/hud-theme.css";
+ *  in src/client/Main.ts.
+ *
+ *  How it works: the HUD is built from Tailwind utility classes. Rules in
+ *  this file are not inside any @layer, so they win over those utilities
+ *  without !important. Every rule is scoped to the in-game HUD elements, so
+ *  the home page and lobby screens are not affected.
+ * ============================================================================
+ */
+
+:root {
+  /* ---- Panels ------------------------------------------------------------ */
+  --hud-surface: rgba(16, 18, 22, 0.84); /* panel background */
+  --hud-surface-solid: rgb(20, 24, 31); /* tooltips, menu centre */
+  --hud-modal: rgba(15, 18, 24, 0.94); /* pop-up windows */
+  --hud-blur: 14px; /* frosted-glass blur behind panels */
+  --hud-radius: 12px; /* panel corner rounding */
+  --hud-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  --hud-edge-gap: 8px; /* gap between panels and screen edge */
+
+  /* ---- Inside panels: chips, buttons, table rows ------------------------- */
+  --hud-chip: rgba(255, 255, 255, 0.05);
+  --hud-chip-hover: rgba(255, 255, 255, 0.1);
+  --hud-radius-sm: 8px;
+  --hud-line: rgba(255, 255, 255, 0.08); /* hairline borders + dividers */
+
+  /* ---- Text -------------------------------------------------------------- */
+  --hud-text: #e7e9ee;
+  --hud-text-dim: rgba(231, 233, 238, 0.55);
+
+  /* ---- The one accent colour: troop bar, slider, active buttons ---------- */
+  --hud-accent: #3fa9f5;
+  --hud-accent-soft: rgba(63, 169, 245, 0.16);
+  --hud-accent-mid: rgba(63, 169, 245, 0.45); /* troops out attacking */
+
+  /* ---- Right-click (radial) menu ----------------------------------------- */
+  --hud-radial-saturation: 0.7; /* 1 = original colours, 0 = grey */
+}
+
+/* ============================================================================
+ *  Panels — every HUD box gets the same frosted surface
+ * ========================================================================= */
+
+:is(
+    game-left-sidebar,
+    game-right-sidebar,
+    replay-panel,
+    attacks-display,
+    tutorial-panel,
+    events-display,
+    actionable-events,
+    player-info-overlay,
+    unit-display,
+    heads-up-message,
+    new-lobby-prompt,
+    win-modal
+  )
+  :is(
+    .bg-gray-800\/92,
+    .bg-gray-800\/90,
+    .bg-gray-800\/70,
+    .important-events-container
+  ),
+div:has(> control-panel) {
+  background-color: var(--hud-surface);
+  backdrop-filter: blur(var(--hud-blur));
+  -webkit-backdrop-filter: blur(var(--hud-blur));
+  /* inset shadow = hairline border that doesn't shift layout or replace
+     the coloured left edge some alert panels have */
+  box-shadow:
+    inset 0 0 0 1px var(--hud-line),
+    var(--hud-shadow);
+  color: var(--hud-text);
+}
+
+/* On tablet/desktop, panels float a little away from the screen edges with
+   the same rounded corners everywhere. Phones keep the edge-to-edge layout. */
+@media (min-width: 640px) {
+  :is(
+      game-left-sidebar,
+      game-right-sidebar,
+      replay-panel,
+      attacks-display,
+      tutorial-panel,
+      events-display,
+      actionable-events,
+      player-info-overlay
+    )
+    :is(.bg-gray-800\/92, .important-events-container),
+  div:has(> control-panel) {
+    border-radius: var(--hud-radius);
+  }
+
+  game-left-sidebar > aside {
+    top: var(--hud-edge-gap);
+    left: var(--hud-edge-gap);
+  }
+
+  /* player info card (top centre, shown while hovering a player) */
+  player-info-overlay .fixed.top-0 {
+    top: var(--hud-edge-gap);
+  }
+
+  div.fixed:has(> game-right-sidebar) {
+    top: var(--hud-edge-gap);
+    right: var(--hud-edge-gap);
+  }
+  /* slide fully out of view when hidden (it now sits away from the edge) */
+  game-right-sidebar > aside.translate-x-full {
+    translate: calc(100% + var(--hud-edge-gap) + 24px) 0;
+  }
+
+  div.fixed.bottom-0:has(control-panel) {
+    bottom: var(--hud-edge-gap);
+  }
+}
+
+/* ============================================================================
+ *  Chips & buttons inside panels — one neutral style instead of mixed
+ *  green / yellow / grey outlines. Numbers keep their colours (green troop
+ *  growth, yellow gold) so the meaning is still there.
+ * ========================================================================= */
+
+:is(control-panel, player-info-overlay)
+  :is(
+    .border-gray-500,
+    .border-gray-600,
+    .border-green-400,
+    .border-orange-400,
+    .border-yellow-400
+  ) {
+  border-color: var(--hud-line);
+  background-color: var(--hud-chip);
+  border-radius: var(--hud-radius-sm);
+}
+
+control-panel .rounded-md {
+  border-radius: var(--hud-radius-sm);
+}
+
+/* Troop bars */
+:is(control-panel, player-info-overlay) .bg-malibu-blue {
+  background-color: var(--hud-accent);
+}
+control-panel .bg-aquarius,
+player-info-overlay .bg-sky-700 {
+  background-color: var(--hud-accent-mid);
+}
+
+/* Attack-ratio slider + active toggle buttons (e.g. Aim) */
+control-panel input[type="range"] {
+  accent-color: var(--hud-accent);
+}
+control-panel .border-aquarius {
+  border-color: var(--hud-accent);
+}
+control-panel .bg-aquarius\/25 {
+  background-color: var(--hud-accent-soft);
+}
+control-panel .text-aquarius {
+  color: var(--hud-accent);
+}
+
+/* Build bar under the control panel */
+unit-display .border-white\/10 {
+  border-color: var(--hud-line);
+}
+unit-display .border-slate-500 {
+  border-color: var(--hud-line);
+  border-radius: var(--hud-radius-sm);
+  background-color: var(--hud-chip);
+}
+unit-display .border-slate-500:hover {
+  background-color: var(--hud-chip-hover);
+}
+unit-display .border-slate-500.bg-slate-400\/20 {
+  /* selected structure */
+  background-color: var(--hud-accent-soft);
+  border-color: var(--hud-accent);
+}
+
+/* Leaderboard toggle buttons (top-left) */
+game-left-sidebar .bg-gray-700\/50 {
+  background-color: var(--hud-chip);
+  border-color: var(--hud-line);
+  border-radius: var(--hud-radius-sm);
+}
+game-left-sidebar .bg-gray-700\/50:hover {
+  background-color: var(--hud-chip-hover);
+}
+
+/* ============================================================================
+ *  Leaderboard table — no grid lines, just quiet rows
+ * ========================================================================= */
+
+game-left-sidebar .stats-table .bg-gray-800\/85 {
+  background-color: transparent;
+}
+game-left-sidebar .stats-table-header {
+  background-color: transparent;
+  color: var(--hud-text-dim);
+}
+game-left-sidebar
+  .stats-table
+  :is(.border-l-slate-500, .border-l-slate-600\/40) {
+  border-left-color: transparent;
+}
+game-left-sidebar .stats-table .border-b-slate-500 {
+  border-bottom-color: var(--hud-line);
+}
+game-left-sidebar .stats-table-pinned-row {
+  /* your own row */
+  background-color: var(--hud-accent-soft);
+}
+
+/* ============================================================================
+ *  Pop-up windows: in-game menu, player info, emoji picker
+ * ========================================================================= */
+
+settings-modal .bg-slate-800,
+player-panel .bg-zinc-900\/95,
+emoji-table .bg-zinc-900\/95 {
+  background-color: var(--hud-modal);
+  box-shadow:
+    inset 0 0 0 1px var(--hud-line),
+    var(--hud-shadow);
+  border-color: var(--hud-line);
+  border-radius: var(--hud-radius);
+}
+settings-modal .border-slate-600 {
+  border-color: var(--hud-line);
+}
+player-panel .rounded-2xl {
+  border-radius: var(--hud-radius);
+}
+emoji-table .bg-zinc-800 {
+  background-color: var(--hud-chip);
+  border-color: var(--hud-line);
+}
+emoji-table .bg-zinc-800:hover {
+  background-color: var(--hud-chip-hover);
+}
+
+/* ============================================================================
+ *  Right-click (radial) menu
+ * ========================================================================= */
+
+.radial-menu-container .menu-item-path {
+  filter: saturate(var(--hud-radial-saturation));
+}
+/* centre button in its normal (navy) state; other states keep their colour */
+.radial-menu-container .center-button-visible[fill="#0f2744"] {
+  fill: var(--hud-surface-solid);
+}
+.radial-menu-container .center-button-visible {
+  stroke: var(--hud-line);
+  stroke-width: 1.5px;
+}
+/* the tooltip sets its colours inline, so !important is needed here */
+.radial-tooltip {
+  background: var(--hud-surface-solid) !important;
+  color: var(--hud-text) !important;
+  border-radius: var(--hud-radius-sm) !important;
+  box-shadow:
+    inset 0 0 0 1px var(--hud-line),
+    var(--hud-shadow);
+}
+
+/* Want a fully grey right-click menu (icons only, no coloured slices)?
+   Delete the two lines that contain only the comment markers around the
+   rule below. */
+/*
+.radial-menu-container .menu-item-path:not([fill^="url("]) {
+  fill: var(--hud-surface-solid);
+  stroke: var(--hud-line);
+}
+*/

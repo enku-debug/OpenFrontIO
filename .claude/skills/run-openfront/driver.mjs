@@ -45,6 +45,26 @@ export async function launch({ viewport, rafIntervalMs, args } = {}) {
   const context = await browser.newContext({
     viewport: viewport ?? { width: 1400, height: 1000 },
   });
+  // The game refuses software WebGL (initGL.ts: failIfMajorPerformanceCaveat
+  // + a /swiftshader|llvmpipe|software/ renderer-string check) to spare real
+  // players a ~1fps experience. Headless Chromium only has SwiftShader, so
+  // for testing: drop the caveat flag and report a neutral renderer name.
+  // Harness-only — the game code is untouched.
+  await context.addInitScript(() => {
+    const origGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, attrs) {
+      if (type === "webgl2" && attrs && attrs.failIfMajorPerformanceCaveat) {
+        attrs = { ...attrs, failIfMajorPerformanceCaveat: false };
+      }
+      return origGetContext.call(this, type, attrs);
+    };
+    const UNMASKED_RENDERER_WEBGL = 0x9246;
+    const origGetParameter = WebGL2RenderingContext.prototype.getParameter;
+    WebGL2RenderingContext.prototype.getParameter = function (p) {
+      if (p === UNMASKED_RENDERER_WEBGL) return "Headless Test GPU";
+      return origGetParameter.call(this, p);
+    };
+  });
   if (rafIntervalMs) {
     await context.addInitScript((interval) => {
       let last = 0;
