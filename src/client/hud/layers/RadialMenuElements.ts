@@ -765,6 +765,9 @@ export const centerButtonElement: CenterButtonElement = {
         params.playerActionHandler.handleAttack(
           params.myPlayer,
           params.selected?.id() ?? null,
+          // The tile the player right-clicked to open this menu: use it as
+          // the desired push direction for the attack.
+          params.tile,
         );
       }
     }

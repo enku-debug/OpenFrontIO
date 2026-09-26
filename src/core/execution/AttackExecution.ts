@@ -35,6 +35,11 @@ import { assertNever } from "../Util";
 import { FlatBinaryHeap } from "./utils/FlatBinaryHeap"; // adjust path if needed
 
 const malusForRetreat = 25;
+// Directional-attack tuning: how strongly a player-chosen target point pulls
+// the conquest order towards it. This only reorders WHICH border tile is
+// conquered next (see addNeighbors below) — it never touches attackLogic's
+// troop-loss/speed numbers in Config.ts, so combat math is unchanged.
+const DIRECTION_BIAS_WEIGHT = 40;
 export class AttackExecution implements Execution {
   private active: boolean = true;
   private toConquer = new FlatBinaryHeap();
@@ -56,12 +61,20 @@ export class AttackExecution implements Execution {
   private nbuf: TileRef[] = [0, 0, 0, 0];
   private nbuf2: TileRef[] = [0, 0, 0, 0];
 
+  // width()+height(), cached so the direction bias below scales the same
+  // way on any map size. Recomputed in init()/restoreSnapshot(), never
+  // itself part of the persisted snapshot.
+  private mapDiag = 1;
+
   constructor(
     private startTroops: number | null = null,
     private _owner: Player,
     private _targetID: PlayerID | null,
     private sourceTile: TileRef | null = null,
     private removeTroops: boolean = true,
+    // Tile the player aimed at (e.g. where they right-clicked) to say which
+    // way to push the attack. Null keeps the old undirected behavior.
+    private directionTile: TileRef | null = null,
   ) {}
 
   public targetID(): PlayerID | null {
@@ -78,6 +91,7 @@ export class AttackExecution implements Execution {
     }
     this.mg = mg;
     this.map = mg.map();
+    this.mapDiag = this.map.width() + this.map.height();
 
     if (this._targetID !== null && !mg.hasPlayer(this._targetID)) {
       console.warn(`target ${this._targetID} not found`);
@@ -437,9 +451,20 @@ export class AttackExecution implements Execution {
           break;
       }
 
-      const priority =
+      // Unchanged from before: random spread + terrain + how enclosed the
+      // tile already is, scheduled against the current tick.
+      let priority =
         (this.random.nextInt(0, 7) + 10) * (1 - numOwnedByMe * 0.5 + mag / 2) +
         tickNow;
+
+      // Directional pull: tiles nearer the player's chosen point dequeue
+      // sooner. Distance is normalized by map size so the pull feels the
+      // same on small and large maps; with no direction set this is 0 and
+      // conquest order is exactly as before.
+      if (this.directionTile !== null) {
+        const dist = this.map.manhattanDist(neighbor, this.directionTile);
+        priority += (dist / this.mapDiag) * DIRECTION_BIAS_WEIGHT;
+      }
 
       this.toConquer.enqueue(neighbor, priority);
     }
@@ -502,6 +527,7 @@ export class AttackExecution implements Execution {
       targetID: this._targetID,
       sourceTile: this.sourceTile,
       removeTroops: this.removeTroops,
+      directionTile: this.directionTile,
     });
   }
 
@@ -512,6 +538,7 @@ export class AttackExecution implements Execution {
     if (s.initialized) {
       this.mg = r.game;
       this.map = r.game.map();
+      this.mapDiag = this.map.width() + this.map.height();
     }
     if (s.target !== null) {
       this.target = r.owner(s.target);
@@ -528,6 +555,7 @@ export class AttackExecution implements Execution {
     this._targetID = s.targetID;
     this.sourceTile = s.sourceTile;
     this.removeTroops = s.removeTroops;
+    this.directionTile = s.directionTile;
   }
 }
 
@@ -552,12 +580,18 @@ const AttackExecutionStateSchema = z.object({
   targetID: z.string().nullable(),
   sourceTile: zTile().nullable(),
   removeTroops: z.boolean(),
+  directionTile: zTile().nullable(),
 });
 type AttackExecutionState = z.infer<typeof AttackExecutionStateSchema>;
 
 export const AttackExecutionSnapshot = execSnapshotType({
   name: "Attack",
-  version: 1,
+  // Bumped: added directionTile.
+  version: 2,
   schema: AttackExecutionStateSchema,
+  migrations: {
+    // v1 snapshots predate directional attacks: they were always undirected.
+    1: (data) => ({ ...data, directionTile: null }),
+  },
   cls: () => AttackExecution,
 });

@@ -187,7 +187,12 @@ describe("Transport send paths", () => {
         { type: "intent", intent: { type: "spawn", tile: 123 } },
         {
           type: "intent",
-          intent: { type: "attack", targetID: "player01", troops: 50 },
+          intent: {
+            type: "attack",
+            targetID: "player01",
+            troops: 50,
+            direction: null,
+          },
         },
         {
           type: "intent",

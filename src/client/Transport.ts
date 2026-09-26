@@ -93,6 +93,9 @@ export class SendAttackIntentEvent implements GameEvent {
   constructor(
     public readonly targetID: PlayerID | null,
     public readonly troops: number,
+    // Tile the player aimed at, used to bias which border tiles are
+    // conquered first. Omit (or pass null) for the old undirected behavior.
+    public readonly direction: TileRef | null = null,
   ) {}
 }
 
@@ -796,6 +799,7 @@ export class Transport {
       type: "attack",
       targetID: event.targetID,
       troops: event.troops,
+      direction: event.direction,
     });
   }
 

@@ -673,6 +673,13 @@ export const AttackIntentSchema = z.object({
   type: z.literal("attack"),
   targetID: MappedID.nullable(),
   troops: zb.float({ min: 0 }).nullable(),
+  // Tile the player aimed/clicked at to indicate which way to push the
+  // attack. Optional: omitted (or null) falls back to the old undirected
+  // behavior. A TileRef, so same integer constraint as SpawnIntentSchema's
+  // tile above. Kept optional (rather than a default) so object literals
+  // built against the inferred type — existing tests included — don't have
+  // to name it.
+  direction: zb.uint().nullable().optional(),
 });
 
 export const SpawnIntentSchema = z.object({
