@@ -34,6 +34,11 @@ export async function launch({ viewport, rafIntervalMs, args } = {}) {
     env.FONTCONFIG_FILE = path.join(CACHE, "fonts.conf");
   }
   const browser = await chromium.launch({
+    // Escape hatch for hosts where Playwright's own chromium download is
+    // network-blocked (e.g. cdn.playwright.dev not on the egress allowlist):
+    // point at any already-present Chrome/Chromium-for-Testing build
+    // (Puppeteer's cache, apt, etc.) instead of Playwright's managed one.
+    executablePath: process.env.OPENFRONT_RUN_CHROMIUM_PATH || undefined,
     args: ["--no-sandbox", "--disable-gpu", ...(args ?? [])],
     env,
   });
