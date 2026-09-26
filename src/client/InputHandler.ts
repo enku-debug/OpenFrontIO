@@ -133,6 +133,33 @@ export class WarshipSelectionBoxCancelEvent implements GameEvent {}
 /** Emitted when the player triggers select-all-warships hotkey */
 export class SelectAllWarshipsEvent implements GameEvent {}
 
+/**
+ * Directional-aim drag (uiState.directionalAimMode): a single-pointer drag
+ * on the map draws an arrow instead of panning the camera, so the player can
+ * aim an attack before releasing. See DirectionAimController.
+ */
+export class DirectionAimUpdateEvent implements GameEvent {
+  constructor(
+    public readonly startX: number,
+    public readonly startY: number,
+    public readonly endX: number,
+    public readonly endY: number,
+  ) {}
+}
+
+/** Emitted when the player releases after a real drag while aiming */
+export class DirectionAimCompleteEvent implements GameEvent {
+  constructor(
+    public readonly startX: number,
+    public readonly startY: number,
+    public readonly endX: number,
+    public readonly endY: number,
+  ) {}
+}
+
+/** Emitted when an aim drag is released without moving past the drag threshold */
+export class DirectionAimCancelEvent implements GameEvent {}
+
 /** Emitted when a touch long-press is detected (shows crosshair indicator) */
 export class TouchLongPressStartEvent implements GameEvent {
   constructor(
@@ -937,6 +964,29 @@ export class InputHandler {
         this.eventBus.emit(new WarshipSelectionBoxCancelEvent());
       }
     }
+
+    // Complete a directional-aim drag if aim mode is active. A real drag
+    // (past the threshold) fires the aimed attack and swallows the tap; a
+    // plain click without dragging falls through to the normal click/radial
+    // menu handling below, so aim mode never breaks ordinary clicking.
+    if (this.uiState.directionalAimMode) {
+      const aimDist =
+        Math.abs(event.clientX - this.lastPointerDownX) +
+        Math.abs(event.clientY - this.lastPointerDownY);
+      if (aimDist >= this.DRAG_THRESHOLD_PX) {
+        this.eventBus.emit(
+          new DirectionAimCompleteEvent(
+            this.lastPointerDownX,
+            this.lastPointerDownY,
+            event.clientX,
+            event.clientY,
+          ),
+        );
+        return;
+      } else {
+        this.eventBus.emit(new DirectionAimCancelEvent());
+      }
+    }
     if (this.activeKeys.has(this.keybinds.buildMenuModifier)) {
       this.suppressNextTap = false;
       this.eventBus.emit(new ShowBuildMenuEvent(event.clientX, event.clientY));
@@ -1082,6 +1132,17 @@ export class InputHandler {
         this.selectionBoxActive = true;
         this.eventBus.emit(
           new WarshipSelectionBoxUpdateEvent(
+            this.lastPointerDownX,
+            this.lastPointerDownY,
+            event.clientX,
+            event.clientY,
+          ),
+        );
+      } else if (this.uiState.directionalAimMode) {
+        // Aim mode owns single-pointer drags: draw the aim arrow instead of
+        // panning the camera. Resolved on release in onPointerUp.
+        this.eventBus.emit(
+          new DirectionAimUpdateEvent(
             this.lastPointerDownX,
             this.lastPointerDownY,
             event.clientX,

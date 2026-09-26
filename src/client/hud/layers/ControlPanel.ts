@@ -26,6 +26,7 @@ import { PlayerView } from "../../view/PlayerView";
 import { goldCoinIcon, soldierIcon } from "../HotbarIcons";
 import { TutorialHighlight, TutorialHighlightEvent } from "../Tutorial";
 const swordIcon = assetUrl("images/SwordIcon.svg");
+const targetIcon = assetUrl("images/TargetIconWhite.svg");
 
 @customElement("control-panel")
 export class ControlPanel extends LitElement implements Controller {
@@ -36,6 +37,9 @@ export class ControlPanel extends LitElement implements Controller {
 
   @state()
   private attackRatio: number = 0.2;
+
+  @state()
+  private directionalAimMode: boolean = false;
 
   @state()
   private _maxTroops: number;
@@ -128,6 +132,9 @@ export class ControlPanel extends LitElement implements Controller {
     const player = this.game.myPlayer();
     if (player === null || !player.isAlive()) {
       this.setVisibile(false);
+      if (this.directionalAimMode) {
+        this.toggleDirectionalAim();
+      }
       return;
     }
 
@@ -358,6 +365,11 @@ export class ControlPanel extends LitElement implements Controller {
 
   private handleRatioSliderPointerUp(e: Event) {
     (e.target as HTMLInputElement).blur();
+  }
+
+  private toggleDirectionalAim() {
+    this.directionalAimMode = !this.directionalAimMode;
+    this.uiState.directionalAimMode = this.directionalAimMode;
   }
 
   private calculateTroopBar(): { greenPercent: number; orangePercent: number } {
@@ -592,6 +604,24 @@ export class ControlPanel extends LitElement implements Controller {
           @pointerup=${(e: Event) => this.handleRatioSliderPointerUp(e)}
           class="flex-1 h-1.5 accent-aquarius cursor-pointer"
         />
+        <button
+          type="button"
+          @click=${() => this.toggleDirectionalAim()}
+          title=${translateText("control_panel.aim_direction_tooltip")}
+          class="flex items-center gap-1 shrink-0 border rounded-md px-1.5 py-0.5 text-sm font-bold cursor-pointer transition-colors ${this
+            .directionalAimMode
+            ? "border-aquarius bg-aquarius/25 text-aquarius"
+            : "border-gray-600 text-white"}"
+        >
+          <img
+            src=${targetIcon}
+            alt=""
+            aria-hidden="true"
+            width="12"
+            height="12"
+          />
+          <span>${translateText("control_panel.aim_direction_button")}</span>
+        </button>
       </div>
     `;
   }
@@ -659,6 +689,23 @@ export class ControlPanel extends LitElement implements Controller {
             class="w-full h-1.5 accent-aquarius cursor-pointer"
           />
         </div>
+        <!-- Directional-aim toggle -->
+        <button
+          type="button"
+          @click=${() => this.toggleDirectionalAim()}
+          title=${translateText("control_panel.aim_direction_tooltip")}
+          class="flex items-center justify-center shrink-0 w-7 h-7 border rounded-md transition-colors ${this
+            .directionalAimMode
+            ? "border-aquarius bg-aquarius/25"
+            : "border-gray-600"}"
+        >
+          <img
+            src=${targetIcon}
+            alt=${translateText("control_panel.aim_direction_button")}
+            width="14"
+            height="14"
+          />
+        </button>
       </div>
     `;
   }
