@@ -14,10 +14,19 @@ import { UIState } from "../UIState";
 import { renderTroops, translateText } from "../Utils";
 import { GameView } from "../view";
 
-// Arrowhead size in px (the line stops short of the tip by about this much).
-const HEAD_PX = 11;
+// Arrowhead: length along the path and half its width, in px.
+const HEAD_LEN_PX = 15;
+const HEAD_HALF_PX = 10;
 // Below this on-screen drag length, don't draw anything yet.
 const MIN_VISIBLE_DRAG_PX = 4;
+// A drawn stroke is simplified to at most this many straight segments
+// (must match AIM_MAX_BENDS + 1 in AttackExecution).
+const MAX_SEGMENTS = 3;
+// A bend is only kept if the stroke strays this far (px) from a straight
+// line — ordinary hand wobble stays a single straight arrow.
+const BEND_MIN_PX = 22;
+// Ignore pointer moves smaller than this when recording the stroke.
+const STROKE_STEP_PX = 3;
 // If the drag starts outside your land, look this far back along the arrow
 // for your own territory so the corridor starts at your border.
 const SNAP_BACK_MAX_TILES = 400;
@@ -28,24 +37,31 @@ const TARGET_SEARCH_EXTRA_TILES = 80;
 const KEEP_ALIVE_MS = 2500;
 
 const FAIL_COLOR = "rgba(239, 68, 68, 0.9)";
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+interface Pt {
+  x: number;
+  y: number;
+}
 
 interface ArrowEls {
-  line: HTMLDivElement;
-  head: HTMLDivElement;
+  svg: SVGSVGElement;
+  outline: SVGPolylineElement;
+  line: SVGPolylineElement;
+  head: SVGPolygonElement;
   label: HTMLDivElement;
 }
 
 /** A resolved arrow in world tiles, ready to send. */
 interface Aim {
-  from: TileRef; // arrow start, snapped into your own land when possible
-  tip: TileRef; // where the player released
-  target: TileRef; // first enemy / unclaimed land tile along the arrow
+  // start (snapped into your own land when possible), bends..., tip
+  path: TileRef[];
+  target: TileRef; // first enemy / unclaimed land tile along the path
 }
 
 /** The aimed attack currently running, drawn as a clickable arrow. */
 interface ActiveAim {
-  from: TileRef;
-  tip: TileRef;
+  path: TileRef[];
   targetID: string | null; // null = unclaimed land
   targetSmallID: number;
   waves: number;
@@ -57,18 +73,21 @@ interface ActiveAim {
  *
  * While aim mode is on, InputHandler turns single-pointer drags into the
  * DirectionAim* events instead of panning. This controller:
- *  - draws the arrow while dragging, labelled with who it will hit;
- *  - on release, finds the first enemy (or unclaimed) land the arrow
- *    crosses and sends an attack with the arrow as a corridor (aimFrom ->
- *    direction), so only the border along the arrow advances
+ *  - records the whole stroke and simplifies it to a path of up to
+ *    MAX_SEGMENTS straight segments, so one drag can bend (e.g. right,
+ *    then down, then right again); a roughly straight drag stays one
+ *    arrow, exactly as before;
+ *  - draws that path while dragging, labelled with who it will hit;
+ *  - on release, finds the first enemy (or unclaimed) land along the path
+ *    and sends an attack whose corridor follows it (aimFrom -> aimVia ->
+ *    direction), so only the border along the path advances
  *    (AttackExecution.inAimCorridor);
- *  - keeps that arrow on the map while the attack runs. Clicking it sends
- *    another wave (attack ratio of current troops) into the same corridor;
- *    the simulation merges it into the running attack.
+ *  - keeps the path on the map while the attack runs. Clicking its head or
+ *    badge sends another wave (attack ratio of current troops) along the
+ *    same path; the simulation merges it into the running attack.
  *
- * All drawing is screen-space DOM, like WarshipSelectionController's
- * drag rectangle; the live arrow is re-projected every frame so it stays
- * pinned to the map while the camera moves.
+ * Drawing is a screen-space SVG overlay (pointer-events off except the live
+ * arrow's head), re-projected every frame so it stays pinned to the map.
  */
 export class DirectionAimController implements Controller {
   private drag: ArrowEls | null = null;
@@ -76,6 +95,8 @@ export class DirectionAimController implements Controller {
   private active: ActiveAim | null = null;
   private rafId: number | null = null;
   private dragFadeTimer: ReturnType<typeof setTimeout> | null = null;
+  // Screen points of the drag in progress; stroke[0] is where it started.
+  private stroke: Pt[] = [];
 
   constructor(
     private game: GameView,
@@ -94,8 +115,12 @@ export class DirectionAimController implements Controller {
     this.eventBus.on(DirectionAimCompleteEvent, (e) =>
       this.onDragComplete(e.startX, e.startY, e.endX, e.endY),
     );
-    this.eventBus.on(DirectionAimCancelEvent, () => this.hide(this.drag));
-    this.eventBus.on(CloseViewEvent, () => this.hide(this.drag));
+    const abort = () => {
+      this.stroke = [];
+      this.hide(this.drag);
+    };
+    this.eventBus.on(DirectionAimCancelEvent, abort);
+    this.eventBus.on(CloseViewEvent, abort);
 
     // Any other attack order on the same target (a plain click, the radial
     // menu) replaces the corridor in the simulation, so drop our arrow too.
@@ -122,118 +147,136 @@ export class DirectionAimController implements Controller {
 
   // ---------------------------------------------------------------- dragging
 
+  /** Add a pointer position to the stroke, starting a new one if needed. */
+  private record(sx: number, sy: number, ex: number, ey: number) {
+    const first = this.stroke[0];
+    if (first === undefined || first.x !== sx || first.y !== sy) {
+      this.stroke = [{ x: sx, y: sy }];
+    }
+    const last = this.stroke[this.stroke.length - 1];
+    if (Math.hypot(ex - last.x, ey - last.y) >= STROKE_STEP_PX) {
+      this.stroke.push({ x: ex, y: ey });
+    } else if (this.stroke.length > 1) {
+      // Keep the live end exact without growing the stroke.
+      this.stroke[this.stroke.length - 1] = { x: ex, y: ey };
+    }
+  }
+
   private onDragUpdate(sx: number, sy: number, ex: number, ey: number) {
     if (this.drag === null) return;
+    this.record(sx, sy, ex, ey);
     if (Math.hypot(ex - sx, ey - sy) < MIN_VISIBLE_DRAG_PX) {
       this.hide(this.drag);
       return;
     }
     this.cancelDragFade();
-    const aim = this.resolveAim(sx, sy, ex, ey);
-    this.drawArrow(this.drag, sx, sy, ex, ey, this.playerColor(0.9));
+    const screenPath = simplifyStroke(this.stroke, MAX_SEGMENTS, BEND_MIN_PX);
+    const aim = this.resolveAim(screenPath);
+    this.drawPath(this.drag, screenPath, this.playerColor(0.9));
     this.setLabel(
       this.drag,
       aim === null ? "" : `→ ${this.targetName(aim.target)}`,
-      sx,
-      sy,
-      ex,
-      ey,
+      screenPath,
     );
   }
 
   private onDragComplete(sx: number, sy: number, ex: number, ey: number) {
-    const aim = this.resolveAim(sx, sy, ex, ey);
+    this.record(sx, sy, ex, ey);
+    const screenPath = simplifyStroke(this.stroke, MAX_SEGMENTS, BEND_MIN_PX);
+    this.stroke = [];
+    const aim = this.resolveAim(screenPath);
     if (aim === null) {
-      this.failDrag(sx, sy, ex, ey);
+      this.failPath(screenPath);
       return;
     }
     this.hide(this.drag);
-    this.send(aim, sx, sy, ex, ey);
+    this.send(aim, screenPath);
   }
 
   // ------------------------------------------------------------- sending
 
-  private send(aim: Aim, sx: number, sy: number, ex: number, ey: number) {
+  private send(aim: Aim, screenPath: Pt[]) {
     const me = this.game.myPlayer();
     if (me === null || !me.isAlive() || this.game.inSpawnPhase()) return;
     me.actions(aim.target, null)
       .then((actions) => {
         if (!actions.canAttack) {
-          this.failDrag(sx, sy, ex, ey);
+          this.failPath(screenPath);
           return;
         }
         const owner = this.game.owner(aim.target);
         const troops = me.troops() * this.uiState.attackRatio;
+        const path = aim.path;
         this.eventBus.emit(
-          new SendAttackIntentEvent(owner.id(), troops, aim.tip, aim.from),
+          new SendAttackIntentEvent(
+            owner.id(),
+            troops,
+            path[path.length - 1],
+            path[0],
+            path.slice(1, -1),
+          ),
         );
 
-        const sameCorridor =
+        const sameTarget =
           this.active !== null && this.active.targetSmallID === owner.smallID();
         this.active = {
-          from: aim.from,
-          tip: aim.tip,
+          path,
           targetID: owner.id(),
           targetSmallID: owner.smallID(),
-          waves: sameCorridor ? this.active!.waves + 1 : 1,
+          waves: sameTarget ? this.active!.waves + 1 : 1,
           lastSentAt: performance.now(),
         };
         this.startLoop();
-        this.floatText(`+${renderTroops(troops)}`, ex, ey);
+        const end = screenPath[screenPath.length - 1];
+        this.floatText(`+${renderTroops(troops)}`, end.x, end.y);
       })
       .catch((error) => {
         console.warn("Failed to check aimed attack actions:", error);
       });
   }
 
-  /** Clicking the live arrow: one more wave along the same corridor. */
+  /** Clicking the live arrow: one more wave along the same path. */
   private sendAnotherWave() {
     if (this.active === null) return;
-    const tip = this.tileToScreen(this.active.tip);
-    const from = this.tileToScreen(this.active.from);
-    // Re-resolve from the stored tiles: the spearhead may have moved the
-    // first enemy tile further along the arrow since the last wave.
-    const target = this.findTarget(this.active.from, this.active.tip);
+    // Re-resolve along the stored path: the spearhead may have moved the
+    // first enemy tile further along since the last wave.
+    const target = this.findTarget(this.active.path);
     if (target === null) {
       this.clearActive();
       return;
     }
     this.send(
-      { from: this.active.from, tip: this.active.tip, target },
-      from.x,
-      from.y,
-      tip.x,
-      tip.y,
+      { path: this.active.path, target },
+      this.active.path.map((t) => this.tileToScreen(t)),
     );
   }
 
   // ------------------------------------------------------ aim resolution
 
-  /** Turn a screen-space drag into world tiles, or null if nothing to hit. */
-  private resolveAim(
-    sx: number,
-    sy: number,
-    ex: number,
-    ey: number,
-  ): Aim | null {
+  /** Turn a screen-space path into world tiles, or null if nothing to hit. */
+  private resolveAim(screenPath: Pt[]): Aim | null {
     const me = this.game.myPlayer();
-    if (me === null) return null;
-    const start = this.screenToTile(sx, sy);
-    const tip = this.screenToTile(ex, ey);
-    if (start === null || tip === null || start === tip) return null;
-    const from = this.snapIntoOwnLand(start, tip, me.smallID());
-    const target = this.findTarget(from, tip);
-    return target === null ? null : { from, tip, target };
+    if (me === null || screenPath.length < 2) return null;
+    const tiles: TileRef[] = [];
+    for (const p of screenPath) {
+      const t = this.screenToTile(p.x, p.y);
+      if (t === null) return null;
+      if (tiles[tiles.length - 1] !== t) tiles.push(t);
+    }
+    if (tiles.length < 2) return null;
+    tiles[0] = this.snapIntoOwnLand(tiles[0], tiles[1], me.smallID());
+    const target = this.findTarget(tiles);
+    return target === null ? null : { path: tiles, target };
   }
 
   /**
-   * If the arrow starts outside your land, walk back from its start (away
-   * from the tip) to the nearest tile you own, so the corridor begins at
-   * your border. Unchanged if none is found.
+   * If the path starts outside your land, walk back from its start (away
+   * from the first segment's direction) to the nearest tile you own, so the
+   * corridor begins at your border. Unchanged if none is found.
    */
-  private snapIntoOwnLand(start: TileRef, tip: TileRef, mine: number) {
+  private snapIntoOwnLand(start: TileRef, next: TileRef, mine: number) {
     if (this.game.ownerID(start) === mine) return start;
-    const [ux, uy] = this.unit(start, tip);
+    const [ux, uy] = this.unit(start, next);
     const x0 = this.game.x(start) + 0.5;
     const y0 = this.game.y(start) + 0.5;
     for (let d = 0.5; d <= SNAP_BACK_MAX_TILES; d += 0.5) {
@@ -246,25 +289,30 @@ export class DirectionAimController implements Controller {
     return start;
   }
 
-  /** First land tile along the arrow (and a bit beyond) that isn't yours. */
-  private findTarget(from: TileRef, tip: TileRef): TileRef | null {
+  /** First land tile along the path (and a bit past its tip) not yours. */
+  private findTarget(path: TileRef[]): TileRef | null {
     const me = this.game.myPlayer();
     if (me === null) return null;
     const mine = me.smallID();
-    const [ux, uy] = this.unit(from, tip);
-    const x0 = this.game.x(from) + 0.5;
-    const y0 = this.game.y(from) + 0.5;
-    const len = Math.hypot(
-      this.game.x(tip) - this.game.x(from),
-      this.game.y(tip) - this.game.y(from),
-    );
-    for (let d = 0; d <= len + TARGET_SEARCH_EXTRA_TILES; d += 0.5) {
-      const x = Math.floor(x0 + ux * d);
-      const y = Math.floor(y0 + uy * d);
-      if (!this.game.isValidCoord(x, y)) break;
-      const t = this.game.ref(x, y);
-      if (!this.game.isLand(t) || this.game.ownerID(t) === mine) continue;
-      return t;
+    for (let i = 0; i + 1 < path.length; i++) {
+      const a = path[i];
+      const b = path[i + 1];
+      const [ux, uy] = this.unit(a, b);
+      const x0 = this.game.x(a) + 0.5;
+      const y0 = this.game.y(a) + 0.5;
+      let len = Math.hypot(
+        this.game.x(b) - this.game.x(a),
+        this.game.y(b) - this.game.y(a),
+      );
+      if (i + 2 === path.length) len += TARGET_SEARCH_EXTRA_TILES;
+      for (let d = 0; d <= len; d += 0.5) {
+        const x = Math.floor(x0 + ux * d);
+        const y = Math.floor(y0 + uy * d);
+        if (!this.game.isValidCoord(x, y)) break;
+        const t = this.game.ref(x, y);
+        if (!this.game.isLand(t) || this.game.ownerID(t) === mine) continue;
+        return t;
+      }
     }
     return null;
   }
@@ -283,7 +331,7 @@ export class DirectionAimController implements Controller {
     return this.game.isValidCoord(cx, cy) ? this.game.ref(cx, cy) : null;
   }
 
-  private tileToScreen(t: TileRef): { x: number; y: number } {
+  private tileToScreen(t: TileRef): Pt {
     return this.transformHandler.worldToScreenCoordinates(
       new Cell(this.game.x(t) + 0.5, this.game.y(t) + 0.5),
     );
@@ -316,17 +364,13 @@ export class DirectionAimController implements Controller {
         this.hide(this.live);
         return;
       }
-      const a = this.tileToScreen(this.active.from);
-      const b = this.tileToScreen(this.active.tip);
-      this.drawArrow(this.live, a.x, a.y, b.x, b.y, this.playerColor(0.75));
+      const pts = this.active.path.map((t) => this.tileToScreen(t));
+      this.drawPath(this.live, pts, this.playerColor(0.75));
       const troops = this.activeAttackTroops();
       this.setLabel(
         this.live,
         `×${this.active.waves}${troops === null ? "" : ` · ${renderTroops(troops)}`}  +`,
-        a.x,
-        a.y,
-        b.x,
-        b.y,
+        pts,
       );
       this.rafId = requestAnimationFrame(frame);
     };
@@ -345,34 +389,44 @@ export class DirectionAimController implements Controller {
   // ------------------------------------------------------------- drawing
 
   private createArrow(id: string, clickable: boolean): ArrowEls {
-    const base = (el: HTMLDivElement) => {
-      el.style.position = "fixed";
-      el.style.left = "0";
-      el.style.top = "0";
-      el.style.display = "none";
-      el.style.zIndex = "30";
-      el.style.pointerEvents = "none";
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.id = `${id}-svg`;
+    svg.style.position = "fixed";
+    svg.style.left = "0";
+    svg.style.top = "0";
+    svg.style.width = "100vw";
+    svg.style.height = "100vh";
+    svg.style.overflow = "visible";
+    svg.style.pointerEvents = "none";
+    svg.style.zIndex = "30";
+    svg.style.display = "none";
+
+    const polyline = (stroke: string, width: number) => {
+      const el = document.createElementNS(SVG_NS, "polyline");
+      el.setAttribute("fill", "none");
+      el.setAttribute("stroke", stroke);
+      el.setAttribute("stroke-width", String(width));
+      el.setAttribute("stroke-linejoin", "round");
+      el.setAttribute("stroke-linecap", "round");
       return el;
     };
+    // Thin dark outline under the line so pale colours still read.
+    const outline = polyline("rgba(0, 0, 0, 0.35)", 5);
+    const line = polyline("#fff", 3);
+    const head = document.createElementNS(SVG_NS, "polygon");
+    head.setAttribute("stroke", "rgba(0, 0, 0, 0.45)");
+    head.setAttribute("stroke-width", "1");
+    head.setAttribute("stroke-linejoin", "round");
+    svg.append(outline, line, head);
 
-    const line = base(document.createElement("div"));
-    line.id = `${id}-line`;
-    line.style.height = "3px";
-    line.style.borderRadius = "2px";
-    line.style.transformOrigin = "0 50%";
-    // Thin dark outline so pale territory colours still read on snow/sand.
-    line.style.boxShadow = "0 0 0 1px rgba(0, 0, 0, 0.35)";
-
-    const head = base(document.createElement("div"));
-    head.id = `${id}-head`;
-    head.style.width = "0";
-    head.style.height = "0";
-    head.style.borderStyle = "solid";
-    head.style.transformOrigin = "0 50%";
-    head.style.filter = "drop-shadow(0 0 1px rgba(0, 0, 0, 0.7))";
-
-    const label = base(document.createElement("div"));
+    const label = document.createElement("div");
     label.id = `${id}-label`;
+    label.style.position = "fixed";
+    label.style.left = "0";
+    label.style.top = "0";
+    label.style.zIndex = "30";
+    label.style.display = "none";
+    label.style.pointerEvents = "none";
     label.style.whiteSpace = "nowrap";
     label.style.font = "600 12px/1.2 system-ui, sans-serif";
     label.style.color = "#fff";
@@ -380,82 +434,94 @@ export class DirectionAimController implements Controller {
     label.style.borderRadius = "8px";
     label.style.background = "rgba(16, 18, 22, 0.85)";
     label.style.boxShadow = "inset 0 0 0 1px rgba(255, 255, 255, 0.12)";
-    label.style.transition = "opacity 0.5s";
 
     if (clickable) {
       const tip = translateText("control_panel.aim_add_wave");
-      for (const el of [head, label]) {
-        el.style.pointerEvents = "auto";
-        el.style.cursor = "pointer";
-        el.title = tip;
-        el.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          this.sendAnotherWave();
-        });
-      }
+      const onClick = (ev: Event) => {
+        ev.stopPropagation();
+        this.sendAnotherWave();
+      };
+      head.style.pointerEvents = "auto";
+      head.style.cursor = "pointer";
+      const title = document.createElementNS(SVG_NS, "title");
+      title.textContent = tip;
+      head.appendChild(title);
+      head.addEventListener("click", onClick);
+      label.style.pointerEvents = "auto";
+      label.style.cursor = "pointer";
+      label.title = tip;
+      label.addEventListener("click", onClick);
     }
 
-    document.body.append(line, head, label);
-    return { line, head, label };
+    document.body.append(svg, label);
+    return { svg, outline, line, head, label };
   }
 
-  private drawArrow(
-    els: ArrowEls,
-    sx: number,
-    sy: number,
-    ex: number,
-    ey: number,
-    color: string,
-  ) {
-    const dist = Math.hypot(ex - sx, ey - sy);
-    const angle = (Math.atan2(ey - sy, ex - sx) * 180) / Math.PI;
-    const { line, head } = els;
-    line.style.width = `${Math.max(0, dist - HEAD_PX)}px`;
-    line.style.backgroundColor = color;
-    line.style.transform = `translate(${sx}px, ${sy - 1.5}px) rotate(${angle}deg)`;
-    line.style.display = "block";
+  /** Draw `pts` (screen px) as a polyline ending in an arrowhead. */
+  private drawPath(els: ArrowEls, pts: Pt[], color: string) {
+    const n = pts.length;
+    if (n < 2) {
+      this.hide(els);
+      return;
+    }
+    const tip = pts[n - 1];
+    const prev = pts[n - 2];
+    const segLen = Math.hypot(tip.x - prev.x, tip.y - prev.y) || 1;
+    const ux = (tip.x - prev.x) / segLen;
+    const uy = (tip.y - prev.y) / segLen;
+    // End the line inside the head so the two join cleanly.
+    const back = Math.min(HEAD_LEN_PX * 0.8, segLen);
+    const linePts = [
+      ...pts.slice(0, n - 1),
+      { x: tip.x - ux * back, y: tip.y - uy * back },
+    ];
+    const asAttr = (ps: Pt[]) =>
+      ps.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    els.outline.setAttribute("points", asAttr(linePts));
+    els.line.setAttribute("points", asAttr(linePts));
+    els.line.setAttribute("stroke", color);
 
-    head.style.borderWidth = `${HEAD_PX}px 0 ${HEAD_PX}px ${HEAD_PX * 1.4}px`;
-    head.style.borderColor = `transparent transparent transparent ${color}`;
-    head.style.transform = `translate(${ex - 3}px, ${ey - HEAD_PX}px) rotate(${angle}deg)`;
-    head.style.display = "block";
+    const bx = tip.x - ux * HEAD_LEN_PX;
+    const by = tip.y - uy * HEAD_LEN_PX;
+    els.head.setAttribute(
+      "points",
+      asAttr([
+        tip,
+        { x: bx - uy * HEAD_HALF_PX, y: by + ux * HEAD_HALF_PX },
+        { x: bx + uy * HEAD_HALF_PX, y: by - ux * HEAD_HALF_PX },
+      ]),
+    );
+    els.head.setAttribute("fill", color);
+    els.svg.style.display = "block";
   }
 
-  /** Put `text` just past the arrow's tip (hidden when empty). */
-  private setLabel(
-    els: ArrowEls,
-    text: string,
-    sx: number,
-    sy: number,
-    ex: number,
-    ey: number,
-  ) {
+  /** Put `text` just past the path's tip (hidden when empty). */
+  private setLabel(els: ArrowEls, text: string, pts: Pt[]) {
     const { label } = els;
-    if (text === "") {
+    const n = pts.length;
+    if (text === "" || n < 2) {
       label.style.display = "none";
       return;
     }
-    const dist = Math.hypot(ex - sx, ey - sy) || 1;
-    const off = HEAD_PX * 1.4 + 16;
-    const lx = ex + ((ex - sx) / dist) * off;
-    const ly = ey + ((ey - sy) / dist) * off;
+    const tip = pts[n - 1];
+    const prev = pts[n - 2];
+    const segLen = Math.hypot(tip.x - prev.x, tip.y - prev.y) || 1;
+    const off = HEAD_LEN_PX + 18;
+    const lx = tip.x + ((tip.x - prev.x) / segLen) * off;
+    const ly = tip.y + ((tip.y - prev.y) / segLen) * off;
     if (label.textContent !== text) label.textContent = text;
     label.style.transform = `translate(${lx}px, ${ly}px) translate(-50%, -50%)`;
-    label.style.opacity = "1";
     label.style.display = "block";
   }
 
-  /** Nothing to attack along this arrow: flash it red, then fade out. */
-  private failDrag(sx: number, sy: number, ex: number, ey: number) {
+  /** Nothing to attack along this path: flash it red, then clear it. */
+  private failPath(screenPath: Pt[]) {
     if (this.drag === null) return;
-    this.drawArrow(this.drag, sx, sy, ex, ey, FAIL_COLOR);
+    this.drawPath(this.drag, screenPath, FAIL_COLOR);
     this.setLabel(
       this.drag,
       translateText("control_panel.aim_no_target"),
-      sx,
-      sy,
-      ex,
-      ey,
+      screenPath,
     );
     this.cancelDragFade();
     this.dragFadeTimer = setTimeout(() => {
@@ -495,8 +561,7 @@ export class DirectionAimController implements Controller {
 
   private hide(els: ArrowEls | null) {
     if (els === null) return;
-    els.line.style.display = "none";
-    els.head.style.display = "none";
+    els.svg.style.display = "none";
     els.label.style.display = "none";
   }
 
@@ -506,4 +571,51 @@ export class DirectionAimController implements Controller {
       ? me.territoryColor().lighten(0.25).alpha(alpha).toRgbString()
       : `rgba(255, 120, 80, ${alpha})`;
   }
+}
+
+/**
+ * Reduce a hand-drawn stroke to at most `maxSegments` straight segments:
+ * start from its two ends and repeatedly add the point that strays furthest
+ * from the current path, while that is at least `minBendPx` away. A roughly
+ * straight stroke therefore stays a single segment.
+ */
+export function simplifyStroke(
+  stroke: Pt[],
+  maxSegments: number,
+  minBendPx: number,
+): Pt[] {
+  const n = stroke.length;
+  if (n < 2) return stroke.slice();
+  const keep = [0, n - 1];
+  while (keep.length - 1 < maxSegments) {
+    let bestIdx = -1;
+    let bestDist = minBendPx;
+    for (let k = 0; k + 1 < keep.length; k++) {
+      const a = stroke[keep[k]];
+      const b = stroke[keep[k + 1]];
+      for (let j = keep[k] + 1; j < keep[k + 1]; j++) {
+        const d = distToSegment(stroke[j], a, b);
+        if (d >= bestDist) {
+          bestDist = d;
+          bestIdx = j;
+        }
+      }
+    }
+    if (bestIdx === -1) break;
+    keep.push(bestIdx);
+    keep.sort((x, y) => x - y);
+  }
+  return keep.map((i) => stroke[i]);
+}
+
+function distToSegment(p: Pt, a: Pt, b: Pt): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+  const t = Math.max(
+    0,
+    Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2),
+  );
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }

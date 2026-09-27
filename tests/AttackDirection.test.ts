@@ -259,6 +259,97 @@ describe("Directed attacks", () => {
       }
     });
 
+    /**
+     * Same integer test as AttackExecution.inAimCorridor for a bent path:
+     * union of bands around each segment; the first reaches BACK behind its
+     * start, inner joints overlap by HALF_WIDTH, only the last runs on.
+     */
+    function inPath(x: number, y: number, pts: { x: number; y: number }[]) {
+      const hw2 = HALF_WIDTH * HALF_WIDTH;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const dx = pts[i + 1].x - pts[i].x;
+        const dy = pts[i + 1].y - pts[i].y;
+        const len2 = dx * dx + dy * dy;
+        const rx = x - pts[i].x;
+        const ry = y - pts[i].y;
+        const along = rx * dx + ry * dy;
+        if (along < 0) {
+          const back2 = i === 0 ? BACK * BACK : hw2;
+          if (along * along > back2 * len2) continue;
+        } else if (along > len2 && i + 2 < pts.length) {
+          const past = along - len2;
+          if (past * past > hw2 * len2) continue;
+        }
+        const cross = rx * dy - ry * dx;
+        if (cross * cross <= hw2 * len2) return true;
+      }
+      return false;
+    }
+
+    it("follows a bent path, turning at each bend", async () => {
+      const { game, attacker } = await setupBorderFight();
+      attacker.setTroops(2_000_000);
+      // Z-shaped arrow: right, then down, then right again.
+      const path = [
+        { x: 40, y: 20 },
+        { x: 65, y: 20 },
+        { x: 65, y: 75 },
+        { x: 90, y: 75 },
+      ];
+      game.addExecution(
+        new AttackExecution(
+          1_000_000,
+          attacker,
+          "defender",
+          null,
+          true,
+          game.ref(path[3].x, path[3].y),
+          game.ref(path[0].x, path[0].y),
+          [game.ref(path[1].x, path[1].y), game.ref(path[2].x, path[2].y)],
+        ),
+      );
+      const reachedLastLeg = () =>
+        conqueredInRight(game, attacker).some((t) => t.x >= 80 && t.y >= 70);
+      for (let i = 0; i < 600 && !reachedLastLeg(); i++) {
+        game.executeNextTick();
+      }
+
+      const taken = conqueredInRight(game, attacker);
+      expect(reachedLastLeg()).toBe(true);
+      for (const { x, y } of taken) {
+        expect(inPath(x, y, path), `(${x},${y}) is off the path`).toBe(true);
+      }
+      // It turned at the first bend instead of carrying straight on.
+      expect(taken.some((t) => t.x >= 76 && t.y <= 28)).toBe(false);
+    });
+
+    it("keeps a straight arrow's corridor unchanged when no bends are given", async () => {
+      const straight = await setupBorderFight();
+      straight.game.addExecution(
+        aimed(straight.game, straight.attacker, 20_000),
+      );
+      const viaEmpty = await setupBorderFight();
+      viaEmpty.game.addExecution(
+        new AttackExecution(
+          20_000,
+          viaEmpty.attacker,
+          "defender",
+          null,
+          true,
+          viaEmpty.game.ref(TIP.x, TIP.y),
+          viaEmpty.game.ref(FROM.x, FROM.y),
+          [],
+        ),
+      );
+      for (let i = 0; i < 40; i++) {
+        straight.game.executeNextTick();
+        viaEmpty.game.executeNextTick();
+      }
+      expect(conqueredInRight(viaEmpty.game, viaEmpty.attacker)).toEqual(
+        conqueredInRight(straight.game, straight.attacker),
+      );
+    });
+
     it("falls back to a normal border-wide attack for a zero-length arrow", async () => {
       const { game, attacker } = await setupBorderFight();
       game.addExecution(

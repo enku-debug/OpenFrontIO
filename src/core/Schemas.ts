@@ -682,6 +682,8 @@ export const AttackIntentSchema = z.object({
   direction: zb.uint().nullable().optional(),
   // Start tile of a drawn aim arrow (direction is its tip): corridor attack.
   aimFrom: zb.uint().nullable().optional(),
+  // Where that arrow bends, in order (at most 2 bends = 3 segments).
+  aimVia: z.array(zb.uint()).max(2).optional(),
 });
 
 export const SpawnIntentSchema = z.object({

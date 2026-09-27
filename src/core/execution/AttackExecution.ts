@@ -40,18 +40,25 @@ const malusForRetreat = 25;
 // conquered next (see addNeighbors below) — it never touches attackLogic's
 // troop-loss/speed numbers in Config.ts, so combat math is unchanged.
 const DIRECTION_BIAS_WEIGHT = 40;
-// Aim corridor (player drew an arrow: aimFromTile -> directionTile). The
-// attack then only takes enemy tiles within this many tiles either side of
-// the arrow's line — the rest of the shared border stays put, so every
-// allotted troop pushes along the arrow. Like the bias above this only
-// decides WHICH tiles are eligible; attackLogic's numbers are untouched.
+// Aim corridor (player drew an arrow: aimFromTile -> [aimVia...] ->
+// directionTile). The attack then only takes enemy tiles within this many
+// tiles either side of the arrow's path — the rest of the shared border
+// stays put, so every allotted troop pushes along the arrow. Like the bias
+// above this only decides WHICH tiles are eligible; attackLogic's numbers
+// are untouched.
 const AIM_CORRIDOR_HALF_WIDTH = 8;
 // How far behind the arrow's start the band still reaches, so the border
 // right where the drag began is included.
 const AIM_CORRIDOR_BACK = 8;
+// A drawn path may bend at most this many times (so up to 3 segments).
+const AIM_MAX_BENDS = 2;
 // Squared once for the integer-only corridor test in inAimCorridor().
 const AIM_HALF_WIDTH_SQ = AIM_CORRIDOR_HALF_WIDTH * AIM_CORRIDOR_HALF_WIDTH;
 const AIM_BACK_SQ = AIM_CORRIDOR_BACK * AIM_CORRIDOR_BACK;
+// Per-segment layout of AttackExecution.aimSeg, and its flag bits.
+const AIM_SEG_STRIDE = 6; // ax, ay, dx, dy, len2, flags
+const AIM_SEG_FIRST = 1; // may reach AIM_CORRIDOR_BACK behind its start
+const AIM_SEG_LAST = 2; // keeps going past its end (the arrow's tip)
 export class AttackExecution implements Execution {
   private active: boolean = true;
   private toConquer = new FlatBinaryHeap();
@@ -78,15 +85,11 @@ export class AttackExecution implements Execution {
   // itself part of the persisted snapshot.
   private mapDiag = 1;
 
-  // Aim corridor geometry in whole tiles: arrow start (aimSX, aimSY) and the
-  // arrow vector (aimDX, aimDY); aimLen2 = |vector|^2, or 0 when there is no
-  // corridor. Derived from aimFromTile/directionTile in setupAimCorridor(),
-  // never persisted.
-  private aimSX = 0;
-  private aimSY = 0;
-  private aimDX = 0;
-  private aimDY = 0;
-  private aimLen2 = 0;
+  // Aim corridor geometry in whole tiles, AIM_SEG_STRIDE numbers per path
+  // segment: start (ax, ay), vector (dx, dy), len2 = |vector|^2 and flags.
+  // Empty when there is no corridor. Derived from the aim tiles in
+  // setupAimCorridor(), never persisted.
+  private aimSeg: number[] = [];
 
   constructor(
     private startTroops: number | null = null,
@@ -101,6 +104,9 @@ export class AttackExecution implements Execution {
     // arrow's tip) it turns the attack into a corridor push along the arrow;
     // null keeps the plain directional pull above.
     private aimFromTile: TileRef | null = null,
+    // Where a drawn arrow bends, in order (0 to AIM_MAX_BENDS tiles): the
+    // path runs aimFromTile -> aimVia... -> directionTile.
+    private aimVia: TileRef[] = [],
   ) {}
 
   public targetID(): PlayerID | null {
@@ -129,6 +135,9 @@ export class AttackExecution implements Execution {
     if (this.aimFromTile !== null && !this.map.isValidRef(this.aimFromTile)) {
       this.aimFromTile = null;
     }
+    this.aimVia = this.aimVia
+      .filter((t) => this.map.isValidRef(t))
+      .slice(0, AIM_MAX_BENDS);
     this.setupAimCorridor();
 
     if (this._targetID !== null && !mg.hasPlayer(this._targetID)) {
@@ -262,43 +271,64 @@ export class AttackExecution implements Execution {
     }
   }
 
-  private resetAimCorridor() {
-    this.aimSX = 0;
-    this.aimSY = 0;
-    this.aimDX = 0;
-    this.aimDY = 0;
-    this.aimLen2 = 0;
-  }
-
   private setupAimCorridor() {
-    this.resetAimCorridor();
+    this.aimSeg = [];
     if (this.aimFromTile === null || this.directionTile === null) return;
-    const sx = this.map.x(this.aimFromTile);
-    const sy = this.map.y(this.aimFromTile);
-    const dx = this.map.x(this.directionTile) - sx;
-    const dy = this.map.y(this.directionTile) - sy;
-    // A zero-length arrow has no direction: fall back to the plain pull.
-    if (dx === 0 && dy === 0) return;
-    this.aimSX = sx;
-    this.aimSY = sy;
-    this.aimDX = dx;
-    this.aimDY = dy;
-    this.aimLen2 = dx * dx + dy * dy;
+    // Path points in order, skipping repeats (a zero-length leg has no
+    // direction).
+    const pts: number[] = [];
+    for (const t of [this.aimFromTile, ...this.aimVia, this.directionTile]) {
+      const x = this.map.x(t);
+      const y = this.map.y(t);
+      const n = pts.length;
+      if (n > 0 && pts[n - 2] === x && pts[n - 1] === y) continue;
+      pts.push(x, y);
+    }
+    // All points equal (a zero-length arrow) leaves no segment, so no
+    // corridor: the attack falls back to the plain pull.
+    const segments = pts.length / 2 - 1;
+    for (let i = 0; i < segments; i++) {
+      const ax = pts[2 * i];
+      const ay = pts[2 * i + 1];
+      const dx = pts[2 * i + 2] - ax;
+      const dy = pts[2 * i + 3] - ay;
+      const flags =
+        (i === 0 ? AIM_SEG_FIRST : 0) | (i === segments - 1 ? AIM_SEG_LAST : 0);
+      this.aimSeg.push(ax, ay, dx, dy, dx * dx + dy * dy, flags);
+    }
   }
 
   /**
    * Whether `tile` lies in the aim corridor: within AIM_CORRIDOR_HALF_WIDTH
-   * of the arrow's line, and not more than AIM_CORRIDOR_BACK behind its
-   * start. Integer arithmetic only (squared distances scaled by |arrow|^2),
-   * so every client computes the identical answer.
+   * of any segment of the arrow's path. The first segment also reaches
+   * AIM_CORRIDOR_BACK behind the start; bends overlap by the half-width so
+   * the corner is covered; only the last segment keeps going past its end.
+   * Integer arithmetic only (squared distances scaled by |segment|^2), so
+   * every client computes the identical answer.
    */
   private inAimCorridor(tile: TileRef): boolean {
-    const rx = this.map.x(tile) - this.aimSX;
-    const ry = this.map.y(tile) - this.aimSY;
-    const along = rx * this.aimDX + ry * this.aimDY; // = dist·|arrow|·cos
-    if (along < 0 && along * along > AIM_BACK_SQ * this.aimLen2) return false;
-    const cross = rx * this.aimDY - ry * this.aimDX; // = dist·|arrow|·sin
-    return cross * cross <= AIM_HALF_WIDTH_SQ * this.aimLen2;
+    const tx = this.map.x(tile);
+    const ty = this.map.y(tile);
+    const seg = this.aimSeg;
+    for (let i = 0; i < seg.length; i += AIM_SEG_STRIDE) {
+      const dx = seg[i + 2];
+      const dy = seg[i + 3];
+      const len2 = seg[i + 4];
+      const flags = seg[i + 5];
+      const rx = tx - seg[i];
+      const ry = ty - seg[i + 1];
+      const along = rx * dx + ry * dy; // = dist·|seg|·cos
+      if (along < 0) {
+        const backSq = flags & AIM_SEG_FIRST ? AIM_BACK_SQ : AIM_HALF_WIDTH_SQ;
+        if (along * along > backSq * len2) continue;
+      } else if (along > len2 && !(flags & AIM_SEG_LAST)) {
+        const past = along - len2; // = dist past the segment's end·|seg|
+        if (past * past > AIM_HALF_WIDTH_SQ * len2) continue;
+      }
+      const cross = rx * dy - ry * dx; // = dist·|seg|·sin
+      if (cross * cross <= AIM_HALF_WIDTH_SQ * len2) return true;
+    }
+    return false;
   }
 
   private refreshToConquer() {
@@ -504,7 +534,7 @@ export class AttackExecution implements Execution {
         continue;
       }
       // Aimed arrow: the rest of the shared border is left alone.
-      if (this.aimLen2 !== 0 && !this.inAimCorridor(neighbor)) {
+      if (this.aimSeg.length !== 0 && !this.inAimCorridor(neighbor)) {
         continue;
       }
       this.attack.addBorderTile(neighbor);
@@ -610,6 +640,7 @@ export class AttackExecution implements Execution {
       removeTroops: this.removeTroops,
       directionTile: this.directionTile,
       aimFromTile: this.aimFromTile,
+      aimVia: [...this.aimVia],
     });
   }
 
@@ -639,13 +670,14 @@ export class AttackExecution implements Execution {
     this.removeTroops = s.removeTroops;
     this.directionTile = s.directionTile;
     this.aimFromTile = s.aimFromTile;
+    this.aimVia = [...s.aimVia];
     // Derived, non-persisted fields: a restored object skips the field
     // initializers, so set them here exactly as a live one would have them.
     if (s.initialized) {
       this.setupAimCorridor();
     } else {
       this.mapDiag = 1;
-      this.resetAimCorridor();
+      this.aimSeg = [];
     }
   }
 }
@@ -673,19 +705,22 @@ const AttackExecutionStateSchema = z.object({
   removeTroops: z.boolean(),
   directionTile: zTile().nullable(),
   aimFromTile: zTile().nullable(),
+  aimVia: z.array(zTile()),
 });
 type AttackExecutionState = z.infer<typeof AttackExecutionStateSchema>;
 
 export const AttackExecutionSnapshot = execSnapshotType({
   name: "Attack",
-  // Bumped: v2 added directionTile, v3 added aimFromTile.
-  version: 3,
+  // Bumped: v2 added directionTile, v3 aimFromTile, v4 aimVia.
+  version: 4,
   schema: AttackExecutionStateSchema,
   migrations: {
     // v1 snapshots predate directional attacks: they were always undirected.
     1: (data) => ({ ...data, directionTile: null }),
     // v2 snapshots predate aim corridors.
     2: (data) => ({ ...data, aimFromTile: null }),
+    // v3 snapshots predate bent aim paths: every arrow was straight.
+    3: (data) => ({ ...data, aimVia: [] }),
   },
   cls: () => AttackExecution,
 });

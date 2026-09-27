@@ -99,6 +99,8 @@ export class SendAttackIntentEvent implements GameEvent {
     // Start of a drawn aim arrow; with direction as its tip the attack only
     // advances inside a corridor along the arrow.
     public readonly aimFrom: TileRef | null = null,
+    // Bend points of that arrow, in order (up to 2).
+    public readonly aimVia: TileRef[] = [],
   ) {}
 }
 
@@ -804,6 +806,7 @@ export class Transport {
       troops: event.troops,
       direction: event.direction,
       aimFrom: event.aimFrom,
+      aimVia: event.aimVia,
     });
   }
 
