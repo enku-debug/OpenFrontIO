@@ -167,6 +167,135 @@ describe("Directed attacks", () => {
     })();
   });
 
+  describe("aim corridor (drawn arrow)", () => {
+    // Must match AIM_CORRIDOR_HALF_WIDTH / AIM_CORRIDOR_BACK in
+    // AttackExecution.ts.
+    const HALF_WIDTH = 8;
+    const BACK = 8;
+    // Arrow from inside the attacker's half, up and to the right into the
+    // defender's half.
+    const FROM = { x: 40, y: 60 };
+    const TIP = { x: 70, y: 30 };
+
+    /** Same integer test as AttackExecution.inAimCorridor. */
+    function inCorridor(x: number, y: number): boolean {
+      const dx = TIP.x - FROM.x;
+      const dy = TIP.y - FROM.y;
+      const len2 = dx * dx + dy * dy;
+      const rx = x - FROM.x;
+      const ry = y - FROM.y;
+      const along = rx * dx + ry * dy;
+      if (along < 0 && along * along > BACK * BACK * len2) return false;
+      const cross = rx * dy - ry * dx;
+      return cross * cross <= HALF_WIDTH * HALF_WIDTH * len2;
+    }
+
+    function conqueredInRight(game: Game, player: Player) {
+      const map = game.map();
+      return [...player.tiles()]
+        .filter((t) => map.x(t) >= RIGHT.x)
+        .map((t) => ({ x: map.x(t), y: map.y(t) }));
+    }
+
+    function aimed(game: Game, attacker: Player, troops: number) {
+      return new AttackExecution(
+        troops,
+        attacker,
+        "defender",
+        null,
+        true,
+        game.ref(TIP.x, TIP.y),
+        game.ref(FROM.x, FROM.y),
+      );
+    }
+
+    it("only takes the defender's tiles inside the band along the arrow", async () => {
+      const { game, attacker } = await setupBorderFight();
+      game.addExecution(aimed(game, attacker, 20_000));
+      for (let i = 0; i < 40; i++) game.executeNextTick();
+
+      const taken = conqueredInRight(game, attacker);
+      expect(taken.length).toBeGreaterThan(50);
+      for (const { x, y } of taken) {
+        expect(inCorridor(x, y), `(${x},${y}) is outside the corridor`).toBe(
+          true,
+        );
+      }
+
+      // Same troops, no arrow: spread thin over the whole border, it gets
+      // nowhere near as deep as the corridor push.
+      const plain = await setupBorderFight();
+      plain.game.addExecution(
+        new AttackExecution(20_000, plain.attacker, "defender"),
+      );
+      for (let i = 0; i < 40; i++) plain.game.executeNextTick();
+      const plainDepth = Math.max(
+        ...conqueredInRight(plain.game, plain.attacker).map((t) => t.x),
+      );
+      const aimedDepth = Math.max(...taken.map((t) => t.x));
+      expect(aimedDepth).toBeGreaterThan(plainDepth + 3);
+    });
+
+    it("stacks each extra wave into the same corridor attack", async () => {
+      const { game, attacker } = await setupBorderFight();
+      game.addExecution(aimed(game, attacker, 10_000));
+      for (let i = 0; i < 5; i++) game.executeNextTick();
+      const afterFirst = attacker.outgoingAttacks();
+      expect(afterFirst.length).toBe(1);
+      const firstLeft = afterFirst[0].troops();
+
+      game.addExecution(aimed(game, attacker, 10_000));
+      game.executeNextTick();
+      const merged = attacker.outgoingAttacks();
+      // One attack, carrying what was left of wave 1 plus all of wave 2
+      // (minus at most one tick of fighting).
+      expect(merged.length).toBe(1);
+      expect(merged[0].troops()).toBeGreaterThan(firstLeft + 10_000 - 2_000);
+      expect(merged[0].troops()).toBeLessThanOrEqual(firstLeft + 10_000);
+
+      for (let i = 0; i < 30; i++) game.executeNextTick();
+      for (const { x, y } of conqueredInRight(game, attacker)) {
+        expect(inCorridor(x, y)).toBe(true);
+      }
+    });
+
+    it("falls back to a normal border-wide attack for a zero-length arrow", async () => {
+      const { game, attacker } = await setupBorderFight();
+      game.addExecution(
+        new AttackExecution(
+          20_000,
+          attacker,
+          "defender",
+          null,
+          true,
+          game.ref(60, 50),
+          game.ref(60, 50),
+        ),
+      );
+      for (let i = 0; i < 40; i++) game.executeNextTick();
+      const ys = conqueredInRight(game, attacker).map((t) => t.y);
+      // Spread along the whole shared border, not a narrow band.
+      expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(60);
+    });
+
+    it("ignores aim tiles that are not on the map", async () => {
+      const { game, attacker } = await setupBorderFight();
+      game.addExecution(
+        new AttackExecution(
+          20_000,
+          attacker,
+          "defender",
+          null,
+          true,
+          999_999_999,
+          999_999_998,
+        ),
+      );
+      for (let i = 0; i < 20; i++) game.executeNextTick();
+      expect(attacker.numTilesOwned()).toBeGreaterThan(LEFT.w * LEFT.h);
+    });
+  });
+
   it("behaves exactly as before when no direction is given", async () => {
     // With directionTile omitted, AttackExecution must be unaffected: this
     // guards against the new field changing default behavior for the many

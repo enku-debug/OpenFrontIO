@@ -68,6 +68,27 @@ describe("snapshot: land attacks", () => {
     await expectSnapshotRoundTrip(game, MAP, 60);
   });
 
+  test("aimed corridor attack, restored mid-push", async () => {
+    const { game, a, b } = await landGame();
+    conquerRect(game, a, 20, 10, 40, 20);
+    // Arrow from inside a's land towards the lower right of b's land: the
+    // restored execution must rebuild the same corridor to stay in sync.
+    game.addExecution(
+      new AttackExecution(
+        20_000,
+        a,
+        b.id(),
+        null,
+        true,
+        game.ref(80, 35),
+        game.ref(30, 15),
+      ),
+    );
+    executeTicks(game, 6);
+    expect(a.outgoingAttacks().length).toBe(1);
+    await expectSnapshotRoundTrip(game, MAP, 40);
+  });
+
   test("retreating attack", async () => {
     const { game, a, b } = await landGame();
     conquerRect(game, a, 20, 10, 40, 20);

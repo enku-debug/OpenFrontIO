@@ -69,6 +69,7 @@ export class Executor {
           null,
           true,
           intent.direction ?? null,
+          intent.aimFrom ?? null,
         );
       }
       case "cancel_attack":

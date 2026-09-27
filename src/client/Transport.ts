@@ -96,6 +96,9 @@ export class SendAttackIntentEvent implements GameEvent {
     // Tile the player aimed at, used to bias which border tiles are
     // conquered first. Omit (or pass null) for the old undirected behavior.
     public readonly direction: TileRef | null = null,
+    // Start of a drawn aim arrow; with direction as its tip the attack only
+    // advances inside a corridor along the arrow.
+    public readonly aimFrom: TileRef | null = null,
   ) {}
 }
 
@@ -800,6 +803,7 @@ export class Transport {
       targetID: event.targetID,
       troops: event.troops,
       direction: event.direction,
+      aimFrom: event.aimFrom,
     });
   }
 

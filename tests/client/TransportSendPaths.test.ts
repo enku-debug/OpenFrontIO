@@ -192,6 +192,7 @@ describe("Transport send paths", () => {
             targetID: "player01",
             troops: 50,
             direction: null,
+            aimFrom: null,
           },
         },
         {

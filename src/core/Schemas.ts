@@ -680,6 +680,8 @@ export const AttackIntentSchema = z.object({
   // built against the inferred type — existing tests included — don't have
   // to name it.
   direction: zb.uint().nullable().optional(),
+  // Start tile of a drawn aim arrow (direction is its tip): corridor attack.
+  aimFrom: zb.uint().nullable().optional(),
 });
 
 export const SpawnIntentSchema = z.object({
