@@ -15,6 +15,7 @@
 import { AttackExecution } from "../src/core/execution/AttackExecution";
 import { Game, Player, PlayerInfo, PlayerType } from "../src/core/game/Game";
 import { TileRef } from "../src/core/game/GameMap";
+import { AIM_MAX_VIA } from "../src/core/Schemas";
 import { setup } from "./util/Setup";
 import { UseRealAttackLogic } from "./util/TestConfig";
 
@@ -177,7 +178,7 @@ describe("Directed attacks", () => {
     const FROM = { x: 40, y: 60 };
     const TIP = { x: 70, y: 30 };
 
-    /** Same integer test as AttackExecution.inAimCorridor. */
+    /** Same integer test as AttackExecution.aimSegmentOf. */
     function inCorridor(x: number, y: number): boolean {
       const dx = TIP.x - FROM.x;
       const dy = TIP.y - FROM.y;
@@ -260,7 +261,7 @@ describe("Directed attacks", () => {
     });
 
     /**
-     * Same integer test as AttackExecution.inAimCorridor for a bent path:
+     * Same integer test as AttackExecution.aimSegmentOf for a bent path:
      * union of bands around each segment; the first reaches BACK behind its
      * start, inner joints overlap by HALF_WIDTH, only the last runs on.
      */
@@ -321,6 +322,83 @@ describe("Directed attacks", () => {
       }
       // It turned at the first bend instead of carrying straight on.
       expect(taken.some((t) => t.x >= 76 && t.y <= 28)).toBe(false);
+    });
+
+    it("follows a long freehand line (a U-turn) point by point", async () => {
+      const { game, attacker } = await setupBorderFight();
+      attacker.setTroops(2_000_000);
+      // Right along y=20, round a half circle through x=95, back left along
+      // y=70, then down: the tip ends up close to where the line started,
+      // so only following the line (not heading for the tip) gets there.
+      const path = [
+        { x: 40, y: 20 },
+        { x: 55, y: 20 },
+      ];
+      for (let k = 0; k <= 12; k++) {
+        const a = -Math.PI / 2 + (Math.PI * k) / 12;
+        path.push({
+          x: Math.round(70 + 25 * Math.cos(a)),
+          y: Math.round(45 + 25 * Math.sin(a)),
+        });
+      }
+      path.push({ x: 62, y: 70 }, { x: 62, y: 90 });
+      const ref = (p: { x: number; y: number }) => game.ref(p.x, p.y);
+      game.addExecution(
+        new AttackExecution(
+          1_000_000,
+          attacker,
+          "defender",
+          null,
+          true,
+          ref(path[path.length - 1]),
+          ref(path[0]),
+          path.slice(1, -1).map(ref),
+        ),
+      );
+      const reachedTail = () =>
+        conqueredInRight(game, attacker).some((t) => t.y >= 85 && t.x <= 66);
+      for (let i = 0; i < 1500 && !reachedTail(); i++) {
+        game.executeNextTick();
+      }
+
+      const taken = conqueredInRight(game, attacker);
+      expect(reachedTail()).toBe(true);
+      for (const { x, y } of taken) {
+        expect(inPath(x, y, path), `(${x},${y}) is off the path`).toBe(true);
+      }
+      // It went round the far side of the curve...
+      expect(taken.some((t) => t.x >= 92 && t.y >= 40 && t.y <= 50)).toBe(true);
+      // ...and never cut through the middle of the U.
+      expect(
+        taken.some((t) => t.x >= 60 && t.x <= 68 && t.y >= 36 && t.y <= 54),
+      ).toBe(false);
+    });
+
+    it("uses at most AIM_MAX_VIA points of a path", async () => {
+      const { game, attacker } = await setupBorderFight();
+      attacker.setTroops(2_000_000);
+      // 30 points along y=20, then 10 more heading far down. Only the first
+      // 30 count, so the line runs straight on along y=20 to the tip.
+      const via: TileRef[] = [];
+      for (let x = 41; x <= 70; x++) via.push(game.ref(x, 20));
+      for (let y = 30; y <= 75; y += 5) via.push(game.ref(70, y));
+      expect(via.length).toBe(AIM_MAX_VIA + 10);
+      game.addExecution(
+        new AttackExecution(
+          1_000_000,
+          attacker,
+          "defender",
+          null,
+          true,
+          game.ref(95, 20),
+          game.ref(40, 20),
+          via,
+        ),
+      );
+      for (let i = 0; i < 300; i++) game.executeNextTick();
+      const taken = conqueredInRight(game, attacker);
+      expect(taken.some((t) => t.x >= 90)).toBe(true);
+      expect(taken.some((t) => t.y > 30)).toBe(false);
     });
 
     it("keeps a straight arrow's corridor unchanged when no bends are given", async () => {

@@ -1,6 +1,7 @@
 import { EventBus } from "../../core/EventBus";
 import { Cell } from "../../core/game/Game";
 import { TileRef } from "../../core/game/GameMap";
+import { AIM_MAX_VIA } from "../../core/Schemas";
 import { Controller } from "../Controller";
 import {
   CloseViewEvent,
@@ -19,17 +20,19 @@ const HEAD_LEN_PX = 15;
 const HEAD_HALF_PX = 10;
 // Below this on-screen drag length, don't draw anything yet.
 const MIN_VISIBLE_DRAG_PX = 4;
-// A drawn stroke is simplified to at most this many straight segments
-// (must match AIM_MAX_BENDS + 1 in AttackExecution).
-const MAX_SEGMENTS = 3;
-// A bend is only kept if the stroke strays this far (px) from a straight
-// line — ordinary hand wobble stays a single straight arrow.
-const BEND_MIN_PX = 22;
+// The drawn line is followed to within this many tiles...
+const LINE_TOLERANCE_TILES = 1.2;
+// ...but never finer than this on screen, so mouse jitter doesn't count
+// when zoomed far out.
+const LINE_TOLERANCE_MIN_PX = 3;
 // Ignore pointer moves smaller than this when recording the stroke.
 const STROKE_STEP_PX = 3;
-// If the drag starts outside your land, look this far back along the arrow
-// for your own territory so the corridor starts at your border.
-const SNAP_BACK_MAX_TILES = 400;
+// If the line starts outside your land, the attack starts from your nearest
+// tile within this many tiles, joined to the line's start.
+const CONNECT_MAX_TILES = 150;
+// A nearest own tile this close just replaces the start instead of adding
+// a tiny extra leg.
+const CONNECT_MERGE_TILES = 2;
 // Keep looking for enemy land this far past the arrow's tip.
 const TARGET_SEARCH_EXTRA_TILES = 80;
 // After a wave is sent, give the simulation this long to create the attack
@@ -52,16 +55,19 @@ interface ArrowEls {
   label: HTMLDivElement;
 }
 
-/** A resolved arrow in world tiles, ready to send. */
+/** A resolved line in world tiles, ready to send. */
 interface Aim {
-  // start (snapped into your own land when possible), bends..., tip
+  // start (your own land when possible), points along the line..., tip
   path: TileRef[];
+  // The same line in world coordinates (sub-tile), for drawing.
+  display: Pt[];
   target: TileRef; // first enemy / unclaimed land tile along the path
 }
 
 /** The aimed attack currently running, drawn as a clickable arrow. */
 interface ActiveAim {
   path: TileRef[];
+  display: Pt[];
   targetID: string | null; // null = unclaimed land
   targetSmallID: number;
   waves: number;
@@ -73,15 +79,16 @@ interface ActiveAim {
  *
  * While aim mode is on, InputHandler turns single-pointer drags into the
  * DirectionAim* events instead of panning. This controller:
- *  - records the whole stroke and simplifies it to a path of up to
- *    MAX_SEGMENTS straight segments, so one drag can bend (e.g. right,
- *    then down, then right again); a roughly straight drag stays one
- *    arrow, exactly as before;
- *  - draws that path while dragging, labelled with who it will hit;
- *  - on release, finds the first enemy (or unclaimed) land along the path
- *    and sends an attack whose corridor follows it (aimFrom -> aimVia ->
- *    direction), so only the border along the path advances
- *    (AttackExecution.inAimCorridor);
+ *  - records the whole stroke in world coordinates and follows it as a
+ *    freehand line: simplified to within LINE_TOLERANCE_TILES using up to
+ *    AIM_MAX_VIA points in between, so curves and turns are kept;
+ *  - if the line starts outside your land, starts it from your nearest
+ *    tile instead, so the attack runs from your border to the line;
+ *  - draws that line while dragging, labelled with who it will hit;
+ *  - on release, finds the first enemy (or unclaimed) land along it and
+ *    sends an attack whose corridor follows it (aimFrom -> aimVia ->
+ *    direction), so only the border along the line advances, pushing on
+ *    along it (AttackExecution.aimSegmentOf / aimRemaining);
  *  - keeps the path on the map while the attack runs. Clicking its head or
  *    badge sends another wave (attack ratio of current troops) along the
  *    same path; the simulation merges it into the running attack.
@@ -95,8 +102,14 @@ export class DirectionAimController implements Controller {
   private active: ActiveAim | null = null;
   private rafId: number | null = null;
   private dragFadeTimer: ReturnType<typeof setTimeout> | null = null;
-  // Screen points of the drag in progress; stroke[0] is where it started.
+  // The drag in progress: where it started on screen (to tell strokes
+  // apart), the last recorded screen point, and the stroke in world coords.
+  private strokeStart: Pt | null = null;
+  private strokeLast: Pt | null = null;
   private stroke: Pt[] = [];
+  // Nearest own tile for the current stroke's start (see connectStart).
+  private connectCache: { start: TileRef; result: TileRef | null } | null =
+    null;
 
   constructor(
     private game: GameView,
@@ -116,7 +129,7 @@ export class DirectionAimController implements Controller {
       this.onDragComplete(e.startX, e.startY, e.endX, e.endY),
     );
     const abort = () => {
-      this.stroke = [];
+      this.resetStroke();
       this.hide(this.drag);
     };
     this.eventBus.on(DirectionAimCancelEvent, abort);
@@ -147,19 +160,40 @@ export class DirectionAimController implements Controller {
 
   // ---------------------------------------------------------------- dragging
 
+  private resetStroke() {
+    this.strokeStart = null;
+    this.strokeLast = null;
+    this.stroke = [];
+    this.connectCache = null;
+  }
+
   /** Add a pointer position to the stroke, starting a new one if needed. */
   private record(sx: number, sy: number, ex: number, ey: number) {
-    const first = this.stroke[0];
-    if (first === undefined || first.x !== sx || first.y !== sy) {
-      this.stroke = [{ x: sx, y: sy }];
+    const start = this.strokeStart;
+    if (start === null || start.x !== sx || start.y !== sy) {
+      this.resetStroke();
+      this.strokeStart = { x: sx, y: sy };
+      this.strokeLast = { x: sx, y: sy };
+      this.stroke = [this.toWorld(sx, sy)];
     }
-    const last = this.stroke[this.stroke.length - 1];
+    const last = this.strokeLast!;
+    const end = this.toWorld(ex, ey);
     if (Math.hypot(ex - last.x, ey - last.y) >= STROKE_STEP_PX) {
-      this.stroke.push({ x: ex, y: ey });
+      this.strokeLast = { x: ex, y: ey };
+      this.stroke.push(end);
     } else if (this.stroke.length > 1) {
       // Keep the live end exact without growing the stroke.
-      this.stroke[this.stroke.length - 1] = { x: ex, y: ey };
+      this.stroke[this.stroke.length - 1] = end;
     }
+  }
+
+  /** The stroke so far as a followable line (world coords). */
+  private strokeLine(): Pt[] {
+    const tol = Math.max(
+      LINE_TOLERANCE_TILES,
+      LINE_TOLERANCE_MIN_PX / this.transformHandler.scale,
+    );
+    return simplifyStroke(this.stroke, AIM_MAX_VIA, tol);
   }
 
   private onDragUpdate(sx: number, sy: number, ex: number, ey: number) {
@@ -170,32 +204,36 @@ export class DirectionAimController implements Controller {
       return;
     }
     this.cancelDragFade();
-    const screenPath = simplifyStroke(this.stroke, MAX_SEGMENTS, BEND_MIN_PX);
-    const aim = this.resolveAim(screenPath);
-    this.drawPath(this.drag, screenPath, this.playerColor(0.9));
+    const line = this.strokeLine();
+    const aim = this.resolveAim(line);
+    const pts = (aim === null ? line : aim.display).map((p) =>
+      this.worldToScreen(p),
+    );
+    this.drawPath(this.drag, pts, this.playerColor(0.9));
     this.setLabel(
       this.drag,
       aim === null ? "" : `→ ${this.targetName(aim.target)}`,
-      screenPath,
+      pts,
     );
   }
 
   private onDragComplete(sx: number, sy: number, ex: number, ey: number) {
     this.record(sx, sy, ex, ey);
-    const screenPath = simplifyStroke(this.stroke, MAX_SEGMENTS, BEND_MIN_PX);
-    this.stroke = [];
-    const aim = this.resolveAim(screenPath);
+    const line = this.strokeLine();
+    const aim = this.resolveAim(line);
+    this.resetStroke();
     if (aim === null) {
-      this.failPath(screenPath);
+      this.failPath(line.map((p) => this.worldToScreen(p)));
       return;
     }
     this.hide(this.drag);
-    this.send(aim, screenPath);
+    this.send(aim);
   }
 
   // ------------------------------------------------------------- sending
 
-  private send(aim: Aim, screenPath: Pt[]) {
+  private send(aim: Aim) {
+    const screenPath = aim.display.map((p) => this.worldToScreen(p));
     const me = this.game.myPlayer();
     if (me === null || !me.isAlive() || this.game.inSpawnPhase()) return;
     me.actions(aim.target, null)
@@ -221,6 +259,7 @@ export class DirectionAimController implements Controller {
           this.active !== null && this.active.targetSmallID === owner.smallID();
         this.active = {
           path,
+          display: aim.display,
           targetID: owner.id(),
           targetSmallID: owner.smallID(),
           waves: sameTarget ? this.active!.waves + 1 : 1,
@@ -245,48 +284,82 @@ export class DirectionAimController implements Controller {
       this.clearActive();
       return;
     }
-    this.send(
-      { path: this.active.path, target },
-      this.active.path.map((t) => this.tileToScreen(t)),
-    );
+    this.send({
+      path: this.active.path,
+      display: this.active.display,
+      target,
+    });
   }
 
   // ------------------------------------------------------ aim resolution
 
-  /** Turn a screen-space path into world tiles, or null if nothing to hit. */
-  private resolveAim(screenPath: Pt[]): Aim | null {
+  /** Turn a world-space line into tiles, or null if nothing to hit. */
+  private resolveAim(line: Pt[]): Aim | null {
     const me = this.game.myPlayer();
-    if (me === null || screenPath.length < 2) return null;
+    if (me === null || line.length < 2) return null;
     const tiles: TileRef[] = [];
-    for (const p of screenPath) {
-      const t = this.screenToTile(p.x, p.y);
+    const display: Pt[] = [];
+    for (const p of line) {
+      const t = this.worldToTile(p);
       if (t === null) return null;
-      if (tiles[tiles.length - 1] !== t) tiles.push(t);
+      if (tiles[tiles.length - 1] === t) continue;
+      tiles.push(t);
+      display.push(p);
     }
     if (tiles.length < 2) return null;
-    tiles[0] = this.snapIntoOwnLand(tiles[0], tiles[1], me.smallID());
+    // Started outside your land: run from your nearest tile to the line.
+    const own = this.connectStart(tiles[0], me.smallID());
+    if (own !== null && own !== tiles[0]) {
+      const dist = Math.hypot(
+        this.game.x(own) - this.game.x(tiles[0]),
+        this.game.y(own) - this.game.y(tiles[0]),
+      );
+      const center = { x: this.game.x(own) + 0.5, y: this.game.y(own) + 0.5 };
+      if (dist <= CONNECT_MERGE_TILES) {
+        tiles[0] = own;
+        display[0] = center;
+      } else {
+        tiles.unshift(own);
+        display.unshift(center);
+      }
+    }
     const target = this.findTarget(tiles);
-    return target === null ? null : { path: tiles, target };
+    return target === null ? null : { path: tiles, display, target };
   }
 
   /**
-   * If the path starts outside your land, walk back from its start (away
-   * from the first segment's direction) to the nearest tile you own, so the
-   * corridor begins at your border. Unchanged if none is found.
+   * The line's start if it is yours, else your nearest tile within
+   * CONNECT_MAX_TILES of it (null if none). Cached for the stroke, since the
+   * start doesn't move while dragging.
    */
-  private snapIntoOwnLand(start: TileRef, next: TileRef, mine: number) {
+  private connectStart(start: TileRef, mine: number): TileRef | null {
     if (this.game.ownerID(start) === mine) return start;
-    const [ux, uy] = this.unit(start, next);
-    const x0 = this.game.x(start) + 0.5;
-    const y0 = this.game.y(start) + 0.5;
-    for (let d = 0.5; d <= SNAP_BACK_MAX_TILES; d += 0.5) {
-      const x = Math.floor(x0 - ux * d);
-      const y = Math.floor(y0 - uy * d);
-      if (!this.game.isValidCoord(x, y)) break;
-      const t = this.game.ref(x, y);
-      if (this.game.ownerID(t) === mine) return t;
+    const cache = this.connectCache;
+    if (cache !== null && cache.start === start) return cache.result;
+    const sx = this.game.x(start);
+    const sy = this.game.y(start);
+    let best: TileRef | null = null;
+    let bestD2 = Infinity;
+    // Grow square rings until one can't hold anything nearer than the best.
+    for (let r = 1; r <= CONNECT_MAX_TILES && r * r <= bestD2; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        const edge = dy === -r || dy === r;
+        for (let dx = -r; dx <= r; dx += edge ? 1 : 2 * r) {
+          const x = sx + dx;
+          const y = sy + dy;
+          if (!this.game.isValidCoord(x, y)) continue;
+          const t = this.game.ref(x, y);
+          if (this.game.ownerID(t) !== mine) continue;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestD2) {
+            bestD2 = d2;
+            best = t;
+          }
+        }
+      }
     }
-    return start;
+    this.connectCache = { start, result: best };
+    return best;
   }
 
   /** First land tile along the path (and a bit past its tip) not yours. */
@@ -324,17 +397,18 @@ export class DirectionAimController implements Controller {
     return [dx / len, dy / len];
   }
 
-  private screenToTile(x: number, y: number): TileRef | null {
-    const cell = this.transformHandler.screenToWorldCoordinates(x, y);
-    const cx = Math.min(Math.max(cell.x, 0), this.game.width() - 1);
-    const cy = Math.min(Math.max(cell.y, 0), this.game.height() - 1);
+  private toWorld(sx: number, sy: number): Pt {
+    return this.transformHandler.screenToWorldCoordinatesFloat(sx, sy);
+  }
+
+  private worldToTile(p: Pt): TileRef | null {
+    const cx = Math.min(Math.max(Math.floor(p.x), 0), this.game.width() - 1);
+    const cy = Math.min(Math.max(Math.floor(p.y), 0), this.game.height() - 1);
     return this.game.isValidCoord(cx, cy) ? this.game.ref(cx, cy) : null;
   }
 
-  private tileToScreen(t: TileRef): Pt {
-    return this.transformHandler.worldToScreenCoordinates(
-      new Cell(this.game.x(t) + 0.5, this.game.y(t) + 0.5),
-    );
+  private worldToScreen(p: Pt): Pt {
+    return this.transformHandler.worldToScreenCoordinates(new Cell(p.x, p.y));
   }
 
   private targetName(t: TileRef): string {
@@ -364,7 +438,7 @@ export class DirectionAimController implements Controller {
         this.hide(this.live);
         return;
       }
-      const pts = this.active.path.map((t) => this.tileToScreen(t));
+      const pts = this.active.display.map((p) => this.worldToScreen(p));
       this.drawPath(this.live, pts, this.playerColor(0.75));
       const troops = this.activeAttackTroops();
       this.setLabel(
@@ -576,20 +650,21 @@ export class DirectionAimController implements Controller {
 /**
  * Reduce a hand-drawn stroke to at most `maxSegments` straight segments:
  * start from its two ends and repeatedly add the point that strays furthest
- * from the current path, while that is at least `minBendPx` away. A roughly
- * straight stroke therefore stays a single segment.
+ * from the current path, while that is at least `tolerance` away (same
+ * units as the points). A roughly straight stroke stays a single segment;
+ * a curve keeps as many points as it needs, up to the limit.
  */
 export function simplifyStroke(
   stroke: Pt[],
   maxSegments: number,
-  minBendPx: number,
+  tolerance: number,
 ): Pt[] {
   const n = stroke.length;
   if (n < 2) return stroke.slice();
   const keep = [0, n - 1];
   while (keep.length - 1 < maxSegments) {
     let bestIdx = -1;
-    let bestDist = minBendPx;
+    let bestDist = tolerance;
     for (let k = 0; k + 1 < keep.length; k++) {
       const a = stroke[keep[k]];
       const b = stroke[keep[k + 1]];

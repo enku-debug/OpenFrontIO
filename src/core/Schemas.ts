@@ -669,6 +669,11 @@ export const AllianceExtensionIntentSchema = z.object({
   recipient: MappedID,
 });
 
+// Most points a drawn aim path may pass through between its start and tip
+// (so up to AIM_MAX_VIA + 1 straight pieces) — enough to follow a freehand
+// line. Checked here and again in AttackExecution.
+export const AIM_MAX_VIA = 30;
+
 export const AttackIntentSchema = z.object({
   type: z.literal("attack"),
   targetID: MappedID.nullable(),
@@ -682,8 +687,9 @@ export const AttackIntentSchema = z.object({
   direction: zb.uint().nullable().optional(),
   // Start tile of a drawn aim arrow (direction is its tip): corridor attack.
   aimFrom: zb.uint().nullable().optional(),
-  // Where that arrow bends, in order (at most 2 bends = 3 segments).
-  aimVia: z.array(zb.uint()).max(2).optional(),
+  // Points the drawn path passes through between aimFrom and direction, in
+  // order (a freehand line, at most AIM_MAX_VIA points).
+  aimVia: z.array(zb.uint()).max(AIM_MAX_VIA).optional(),
 });
 
 export const SpawnIntentSchema = z.object({

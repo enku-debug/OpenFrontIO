@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AIM_MAX_VIA,
   AttackIntentSchema,
   BoatAttackIntentSchema,
   BuildUnitIntentSchema,
@@ -89,6 +90,23 @@ describe("intent schemas: unit ids are non-negative integers", () => {
 // fractional in the sim, so pinning these to .int() would reject every honest
 // attack. This locks the looser contract in place.
 describe("intent schemas: troop and gold amounts stay fractional", () => {
+  it("attack accepts an aim path of up to AIM_MAX_VIA points", () => {
+    const intent = (n: number) => ({
+      type: "attack",
+      targetID: null,
+      troops: 100,
+      direction: 5,
+      aimFrom: 1,
+      aimVia: Array.from({ length: n }, (_, i) => i + 10),
+    });
+    expect(AttackIntentSchema.safeParse(intent(AIM_MAX_VIA)).success).toBe(
+      true,
+    );
+    expect(AttackIntentSchema.safeParse(intent(AIM_MAX_VIA + 1)).success).toBe(
+      false,
+    );
+  });
+
   it("attack accepts fractional troops", () => {
     const intent = { type: "attack", targetID: null, troops: 12.5 };
     expect(AttackIntentSchema.safeParse(intent).success).toBe(true);

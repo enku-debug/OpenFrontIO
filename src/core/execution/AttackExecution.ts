@@ -16,6 +16,7 @@ import {
 } from "../game/Game";
 import { GameMap, TileRef } from "../game/GameMap";
 import { PseudoRandom } from "../PseudoRandom";
+import { AIM_MAX_VIA } from "../Schemas";
 import { execSnapshotType } from "../snapshot/ExecutionSnapshot";
 import type {
   ExecRecord,
@@ -50,13 +51,12 @@ const AIM_CORRIDOR_HALF_WIDTH = 8;
 // How far behind the arrow's start the band still reaches, so the border
 // right where the drag began is included.
 const AIM_CORRIDOR_BACK = 8;
-// A drawn path may bend at most this many times (so up to 3 segments).
-const AIM_MAX_BENDS = 2;
-// Squared once for the integer-only corridor test in inAimCorridor().
+// Squared once for the integer-only corridor test in aimSegmentOf().
 const AIM_HALF_WIDTH_SQ = AIM_CORRIDOR_HALF_WIDTH * AIM_CORRIDOR_HALF_WIDTH;
 const AIM_BACK_SQ = AIM_CORRIDOR_BACK * AIM_CORRIDOR_BACK;
-// Per-segment layout of AttackExecution.aimSeg, and its flag bits.
-const AIM_SEG_STRIDE = 6; // ax, ay, dx, dy, len2, flags
+// Per-segment layout of AttackExecution.aimSeg, and its flag bits. `rest` is
+// the Manhattan length of the path after this segment.
+const AIM_SEG_STRIDE = 7; // ax, ay, dx, dy, len2, flags, rest
 const AIM_SEG_FIRST = 1; // may reach AIM_CORRIDOR_BACK behind its start
 const AIM_SEG_LAST = 2; // keeps going past its end (the arrow's tip)
 export class AttackExecution implements Execution {
@@ -86,7 +86,8 @@ export class AttackExecution implements Execution {
   private mapDiag = 1;
 
   // Aim corridor geometry in whole tiles, AIM_SEG_STRIDE numbers per path
-  // segment: start (ax, ay), vector (dx, dy), len2 = |vector|^2 and flags.
+  // segment: start (ax, ay), vector (dx, dy), len2 = |vector|^2, flags and
+  // the Manhattan length of the path still ahead after this segment.
   // Empty when there is no corridor. Derived from the aim tiles in
   // setupAimCorridor(), never persisted.
   private aimSeg: number[] = [];
@@ -104,8 +105,8 @@ export class AttackExecution implements Execution {
     // arrow's tip) it turns the attack into a corridor push along the arrow;
     // null keeps the plain directional pull above.
     private aimFromTile: TileRef | null = null,
-    // Where a drawn arrow bends, in order (0 to AIM_MAX_BENDS tiles): the
-    // path runs aimFromTile -> aimVia... -> directionTile.
+    // Points a drawn path passes through, in order (0 to AIM_MAX_VIA tiles —
+    // a freehand line): it runs aimFromTile -> aimVia... -> directionTile.
     private aimVia: TileRef[] = [],
   ) {}
 
@@ -137,7 +138,7 @@ export class AttackExecution implements Execution {
     }
     this.aimVia = this.aimVia
       .filter((t) => this.map.isValidRef(t))
-      .slice(0, AIM_MAX_BENDS);
+      .slice(0, AIM_MAX_VIA);
     this.setupAimCorridor();
 
     if (this._targetID !== null && !mg.hasPlayer(this._targetID)) {
@@ -294,23 +295,35 @@ export class AttackExecution implements Execution {
       const dy = pts[2 * i + 3] - ay;
       const flags =
         (i === 0 ? AIM_SEG_FIRST : 0) | (i === segments - 1 ? AIM_SEG_LAST : 0);
-      this.aimSeg.push(ax, ay, dx, dy, dx * dx + dy * dy, flags);
+      this.aimSeg.push(ax, ay, dx, dy, dx * dx + dy * dy, flags, 0);
+    }
+    // Path length still ahead after each segment, summed from the tip back.
+    let rest = 0;
+    for (
+      let i = this.aimSeg.length - AIM_SEG_STRIDE;
+      i >= 0;
+      i -= AIM_SEG_STRIDE
+    ) {
+      this.aimSeg[i + 6] = rest;
+      rest += Math.abs(this.aimSeg[i + 2]) + Math.abs(this.aimSeg[i + 3]);
     }
   }
 
   /**
-   * Whether `tile` lies in the aim corridor: within AIM_CORRIDOR_HALF_WIDTH
-   * of any segment of the arrow's path. The first segment also reaches
-   * AIM_CORRIDOR_BACK behind the start; bends overlap by the half-width so
-   * the corner is covered; only the last segment keeps going past its end.
-   * Integer arithmetic only (squared distances scaled by |segment|^2), so
-   * every client computes the identical answer.
+   * Which segment of the aim path `tile` lies along (its offset in aimSeg),
+   * or -1 if it is outside the corridor: within AIM_CORRIDOR_HALF_WIDTH of a
+   * segment. The first segment also reaches AIM_CORRIDOR_BACK behind the
+   * start; joints overlap by the half-width so the corner is covered; only
+   * the last segment keeps going past its end. Where a winding path passes
+   * near itself the furthest-along segment wins. Integer arithmetic only
+   * (squared distances scaled by |segment|^2), so every client computes the
+   * identical answer.
    */
-  private inAimCorridor(tile: TileRef): boolean {
+  private aimSegmentOf(tile: TileRef): number {
     const tx = this.map.x(tile);
     const ty = this.map.y(tile);
     const seg = this.aimSeg;
-    for (let i = 0; i < seg.length; i += AIM_SEG_STRIDE) {
+    for (let i = seg.length - AIM_SEG_STRIDE; i >= 0; i -= AIM_SEG_STRIDE) {
       const dx = seg[i + 2];
       const dy = seg[i + 3];
       const len2 = seg[i + 4];
@@ -326,9 +339,25 @@ export class AttackExecution implements Execution {
         if (past * past > AIM_HALF_WIDTH_SQ * len2) continue;
       }
       const cross = rx * dy - ry * dx; // = dist·|seg|·sin
-      if (cross * cross <= AIM_HALF_WIDTH_SQ * len2) return true;
+      if (cross * cross <= AIM_HALF_WIDTH_SQ * len2) return i;
     }
-    return false;
+    return -1;
+  }
+
+  /**
+   * How far `tile` still is from the tip, measured along the aim path from
+   * the segment at offset `i` (Manhattan, whole tiles). For a straight arrow
+   * this is just the distance to the tip.
+   */
+  private aimRemaining(tile: TileRef, i: number): number {
+    const seg = this.aimSeg;
+    const ex = seg[i] + seg[i + 2];
+    const ey = seg[i + 1] + seg[i + 3];
+    return (
+      Math.abs(this.map.x(tile) - ex) +
+      Math.abs(this.map.y(tile) - ey) +
+      seg[i + 6]
+    );
   }
 
   private refreshToConquer() {
@@ -534,8 +563,10 @@ export class AttackExecution implements Execution {
         continue;
       }
       // Aimed arrow: the rest of the shared border is left alone.
-      if (this.aimSeg.length !== 0 && !this.inAimCorridor(neighbor)) {
-        continue;
+      let aimAt = -1;
+      if (this.aimSeg.length !== 0) {
+        aimAt = this.aimSegmentOf(neighbor);
+        if (aimAt === -1) continue;
       }
       this.attack.addBorderTile(neighbor);
       let numOwnedByMe = 0;
@@ -569,11 +600,16 @@ export class AttackExecution implements Execution {
         tickNow;
 
       // Directional pull: tiles nearer the player's chosen point dequeue
-      // sooner. Distance is normalized by map size so the pull feels the
-      // same on small and large maps; with no direction set this is 0 and
-      // conquest order is exactly as before.
+      // sooner — along a drawn path, nearer by path length, so the front
+      // advances along the line rather than cutting toward its tip.
+      // Distance is normalized by map size so the pull feels the same on
+      // small and large maps; with no direction set this is 0 and conquest
+      // order is exactly as before.
       if (this.directionTile !== null) {
-        const dist = this.map.manhattanDist(neighbor, this.directionTile);
+        const dist =
+          aimAt === -1
+            ? this.map.manhattanDist(neighbor, this.directionTile)
+            : this.aimRemaining(neighbor, aimAt);
         priority += (dist / this.mapDiag) * DIRECTION_BIAS_WEIGHT;
       }
 

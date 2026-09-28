@@ -69,6 +69,42 @@ describe("simplifyStroke", () => {
     });
   });
 
+  it("follows a curve closely when given room for many points", () => {
+    // Half circle of radius 60 (world tiles), sampled every ~1 tile.
+    const arc: { x: number; y: number }[] = [];
+    for (let k = 0; k <= 180; k++) {
+      const a = (Math.PI * k) / 180;
+      arc.push({ x: 60 * Math.cos(a), y: 60 * Math.sin(a) });
+    }
+    const path = simplifyStroke(arc, 30, 1.2);
+    expect(path.length).toBeGreaterThan(8);
+    expect(path.length).toBeLessThanOrEqual(31);
+    expect(path[0]).toEqual(arc[0]);
+    expect(path[path.length - 1]).toEqual(arc[arc.length - 1]);
+    // Every drawn point stays within the tolerance of the kept line.
+    for (const p of arc) {
+      let best = Infinity;
+      for (let i = 0; i + 1 < path.length; i++) {
+        const a = path[i];
+        const b = path[i + 1];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const t = Math.max(
+          0,
+          Math.min(
+            1,
+            ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy),
+          ),
+        );
+        best = Math.min(
+          best,
+          Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy),
+        );
+      }
+      expect(best).toBeLessThan(1.2);
+    }
+  });
+
   it("never makes more than the allowed number of segments", () => {
     const zigzag = strokeThrough([
       [0, 0],
