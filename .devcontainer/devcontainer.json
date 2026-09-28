@@ -1,18 +1,25 @@
 {
   // GitHub Codespaces setup for WW3: creating a codespace installs the
-  // project, and every start launches the game on port 9000 (private to
-  // your GitHub account). Open the "Ports" tab, or the pop-up that appears,
-  // to play in the browser.
+  // project, and every start launches the game on port 9000. Open the
+  // "Ports" tab, or the pop-up that appears, to play in the browser.
   "name": "WW3",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:24",
   "containerEnv": {
-    "SKIP_BROWSER_OPEN": "true"
+    "SKIP_BROWSER_OPEN": "true",
+    // Listen on every interface (the project's LAN mode, as in
+    // `npm run dev:host`): in the container "localhost" can mean IPv6 only,
+    // which the port forwarder doesn't reach.
+    "VITE_HOST": "lan",
+    // Accept the forwarded https://<name>-9000.app.github.dev address.
+    "VITE_ALLOWED_HOSTS": ".app.github.dev"
   },
   // package.json pins npm 12 (engine-strict), the base image ships npm 11.
   "postCreateCommand": "npm install -g npm@12 && npm run inst",
   // Start client + game server in the background on every codespace start,
   // so the game is up even before an editor attaches. Log: /tmp/ww3-dev.log
   "postStartCommand": "bash -c 'setsid nohup npm run dev > /tmp/ww3-dev.log 2>&1 < /dev/null &'",
+  // Show that log in a terminal whenever the editor opens.
+  "postAttachCommand": "tail -n 40 -F /tmp/ww3-dev.log",
   "forwardPorts": [9000],
   "portsAttributes": {
     "9000": {

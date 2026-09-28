@@ -430,8 +430,10 @@ export default defineConfig(({ mode }) => {
       // In GitHub Codespaces the game is reached through a forwarded
       // https://<name>-9000.app.github.dev URL; Vite rejects unknown Host
       // headers by default, so allow that domain there (and only there).
+      // .devcontainer/devcontainer.json sets VITE_ALLOWED_HOSTS for this.
       allowedHosts:
-        process.env.CODESPACES === "true" ? [".app.github.dev"] : undefined,
+        process.env.VITE_ALLOWED_HOSTS?.split(",") ??
+        (process.env.CODESPACES === "true" ? [".app.github.dev"] : undefined),
       // Automatically open the browser when the server starts
       open: process.env.SKIP_BROWSER_OPEN !== "true",
       proxy: {
