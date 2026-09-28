@@ -17,9 +17,9 @@
   "postCreateCommand": "npm install -g npm@12 && npm run inst",
   // Start client + game server in the background on every codespace start,
   // so the game is up even before an editor attaches. Log: /tmp/ww3-dev.log
-  "postStartCommand": "bash -c 'setsid nohup npm run dev > /tmp/ww3-dev.log 2>&1 < /dev/null &'",
-  // Show that log in a terminal whenever the editor opens.
-  "postAttachCommand": "tail -n 40 -F /tmp/ww3-dev.log",
+  "postStartCommand": "bash .devcontainer/start-ww3.sh",
+  // When the editor opens: start it if it isn't running, then show the log.
+  "postAttachCommand": "bash .devcontainer/start-ww3.sh --follow",
   "forwardPorts": [9000],
   "portsAttributes": {
     "9000": {
