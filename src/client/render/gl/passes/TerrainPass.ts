@@ -3,9 +3,11 @@
  *
  * Initial upload happens once; incremental updates flow through
  * applyTerrainRects() so water-nuke conversions (land → water) are reflected
- * live. Vertex shader transforms the map quad by the camera mat3; fragment
- * shader samples the RGBA8 terrain texture with nearest-neighbour filtering
- * so each terrain cell stays pixel-crisp at every zoom level.
+ * live. Vertex shader transforms the map quad by the camera mat3. With
+ * smoothing off the fragment shader samples the RGBA8 terrain texture with
+ * nearest-neighbour filtering (one square per tile); with it on (setSmooth)
+ * it blends the four surrounding tiles, using the shared R8UI terrain-byte
+ * texture to keep land/water edges as smooth anti-aliased curves.
  */
 
 import type { TerrainRect } from "../../types";
@@ -32,6 +34,10 @@ export class TerrainPass {
   private tex: WebGLTexture;
   private vao: WebGLVertexArrayObject;
   private uCamera: WebGLUniformLocation;
+  private uSmooth: WebGLUniformLocation;
+  private smooth = false;
+  // Shared R8UI terrain bytes (owned by the renderer), for smoothing.
+  private terrainBytesTex: WebGLTexture | null = null;
   private mapW: number;
   private mapH: number;
   // Base ocean (deep water) color; reused by applyTerrainRects and rebuilds.
@@ -61,6 +67,10 @@ export class TerrainPass {
       terrainFragSrc,
     );
     this.uCamera = gl.getUniformLocation(this.program, "uCamera")!;
+    this.uSmooth = gl.getUniformLocation(this.program, "uSmooth")!;
+    gl.useProgram(this.program);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uTerrain"), 0);
+    gl.uniform1i(gl.getUniformLocation(this.program, "uTerrainBytes"), 1);
 
     this.tex = createTexture2D(gl, {
       width: mapW,
@@ -145,14 +155,33 @@ export class TerrainPass {
     }
   }
 
+  /** The renderer's R8UI terrain-byte texture (needed for smoothing). */
+  setTerrainBytesTexture(tex: WebGLTexture | null): void {
+    this.terrainBytesTex = tex;
+  }
+
+  /** Smooth coastlines and blend tile colors (vs. one square per tile). */
+  setSmooth(on: boolean): void {
+    this.smooth = on;
+  }
+
   /** Render the terrain. Call with depth test disabled, no blending. */
   draw(cameraMatrix: Float32Array): void {
     const gl = this.gl;
+    const smooth = this.smooth && this.terrainBytesTex !== null;
     gl.useProgram(this.program);
     gl.uniformMatrix3fv(this.uCamera, false, cameraMatrix);
+    gl.uniform1i(this.uSmooth, smooth ? 1 : 0);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
+    // Bound even when not smoothing: an unsigned sampler left pointing at
+    // some other texture fails the draw call.
+    if (this.terrainBytesTex !== null) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.terrainBytesTex);
+      gl.activeTexture(gl.TEXTURE0);
+    }
 
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLES, 0, 6);

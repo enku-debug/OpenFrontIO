@@ -149,6 +149,8 @@ export interface RenderSettings {
     staleNukeG: number;
     staleNukeB: number;
     navalHighlight: boolean;
+    /** Draw coasts, territory and borders with smooth curved edges instead of one square per tile. */
+    smoothEdges: boolean;
     highlightBrighten: number;
     highlightFillBrighten: number;
     highlightThicken: number;

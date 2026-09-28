@@ -31,6 +31,8 @@ export class TerritoryPass {
   private uCamera: WebGLUniformLocation;
   private uMapSize: WebGLUniformLocation;
   private uAltView: WebGLUniformLocation;
+  private uSmooth: WebGLUniformLocation;
+  private smooth = false;
   private uStaleNukeBase: WebGLUniformLocation;
   private uStaleNukeVariation: WebGLUniformLocation;
   private uStaleNukeAlpha: WebGLUniformLocation;
@@ -146,6 +148,7 @@ export class TerritoryPass {
     this.uCamera = gl.getUniformLocation(this.program, "uCamera")!;
     this.uMapSize = gl.getUniformLocation(this.program, "uMapSize")!;
     this.uAltView = gl.getUniformLocation(this.program, "uAltView")!;
+    this.uSmooth = gl.getUniformLocation(this.program, "uSmooth")!;
     this.uStaleNukeBase = gl.getUniformLocation(
       this.program,
       "uStaleNukeBase",
@@ -379,6 +382,11 @@ export class TerritoryPass {
     return "none";
   }
 
+  /** Draw tile edges as smooth curves (vs. one square per tile). */
+  setSmooth(on: boolean): void {
+    this.smooth = on;
+  }
+
   setAltView(active: boolean): void {
     this.altView = active;
   }
@@ -427,6 +435,7 @@ export class TerritoryPass {
     gl.uniformMatrix3fv(this.uCamera, false, cameraMatrix);
     gl.uniform2f(this.uMapSize, this.mapW, this.mapH);
     gl.uniform1i(this.uAltView, this.altView ? 1 : 0);
+    gl.uniform1i(this.uSmooth, this.smooth ? 1 : 0);
     gl.uniform1f(this.uStaleNukeBase, mo.staleNukeBase);
     gl.uniform1f(this.uStaleNukeVariation, mo.staleNukeVariation);
     gl.uniform1f(this.uStaleNukeAlpha, mo.staleNukeAlpha);

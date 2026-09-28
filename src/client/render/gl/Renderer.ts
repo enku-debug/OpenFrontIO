@@ -104,6 +104,10 @@ const SAM_RADIUS_HIGHLIGHT_TYPES = new Set([
 
 const GRID_VIEW_KEY = "renderer:grid_view_enabled";
 
+// Device pixels per tile from which tile edges (coasts, borders) are drawn
+// smoothed rather than as squares (settings.mapOverlay.smoothEdges).
+const SMOOTH_EDGES_MIN_ZOOM = 1.5;
+
 export class GPURenderer {
   private gl: WebGL2RenderingContext;
   private camera: Camera;
@@ -295,6 +299,7 @@ export class GPURenderer {
       data: terrainBytes,
       filter: gl.NEAREST,
     });
+    this.terrainPass.setTerrainBytesTexture(this.terrainBytesTex);
 
     // --- Shared palette texture (RGBA32F, 4096×2) ---
     this.paletteData = paletteData;
@@ -1291,6 +1296,13 @@ export class GPURenderer {
   private renderFrame(): void {
     const cam = this.camera.getMatrix();
     const zoom = this.camera.zoom;
+    // Smooth tile edges once a tile spans a few screen pixels; below that
+    // there is nothing visible to smooth.
+    const smooth =
+      this.settings.mapOverlay.smoothEdges && zoom >= SMOOTH_EDGES_MIN_ZOOM;
+    this.terrainPass.setSmooth(smooth);
+    this.territoryPass.setSmooth(smooth);
+    this.borderStampPass.setSmooth(smooth);
     const cw = this.canvas.width;
     const ch = this.canvas.height;
     const compositingActive = this.isLightCompositingActive();

@@ -29,14 +29,75 @@ uniform float uSaturation;         // 1 = full color, 0 = grayscale
 uniform float uTerritoryAlpha;     // absolute fill opacity; 1 = fully opaque
 uniform sampler2D uAffiliation;    // RGBA8 — alt-view relation colors (row 0)
 uniform float uAltFillAlpha;       // alt-view translucent fill opacity
+uniform int uSmooth;               // 1 = smooth tile edges (see smoothTile)
 
 in vec2 vWorldPos;
 out vec4 fragColor;
+
+// What a tile looks like for edge smoothing: owner + fallout, and whether it
+// is a border tile. MUST match tileKey() in border-stamp.frag.glsl so fill
+// and borders pick the same tile for every pixel.
+uint tileKey(ivec2 tc) {
+  uint raw = texelFetch(uTileTex, tc, 0).r;
+  uint key = raw & (uint(OWNER_MASK) | (1u << FALLOUT_BIT));
+  return (key << 1) | (texelFetch(uBorderTex, tc, 0).r > 0.25 ? 1u : 0u);
+}
+
+// Smooth tile edges: the four tiles around this pixel vote with bilinear
+// weights, grouped by tileKey; the pixel takes the nearest tile of the key
+// with most weight, so region edges run as smooth curves through the tile
+// corners instead of stair-steps. `margin` = winner minus runner-up weight.
+// MUST match smoothTile() in border-stamp.frag.glsl.
+ivec2 smoothTile(vec2 p, out uint topKey, out float margin, out uint secKey) {
+  vec2 q = p - 0.5;
+  vec2 fl = floor(q);
+  vec2 f = q - fl;
+  ivec2 i0 = ivec2(fl);
+  ivec2 hi = ivec2(uMapSize) - 1;
+  ivec2 c[4];
+  float w[4];
+  uint k[4];
+  for (int i = 0; i < 4; i++) {
+    ivec2 o = ivec2(i & 1, i >> 1);
+    c[i] = clamp(i0 + o, ivec2(0), hi);
+    w[i] = (o.x == 1 ? f.x : 1.0 - f.x) * (o.y == 1 ? f.y : 1.0 - f.y);
+    k[i] = tileKey(c[i]);
+  }
+  float s[4];
+  for (int i = 0; i < 4; i++) {
+    s[i] = 0.0;
+    for (int j = 0; j < 4; j++) s[i] += k[j] == k[i] ? w[j] : 0.0;
+  }
+  int t = 0;
+  for (int i = 1; i < 4; i++) {
+    if (s[i] > s[t] || (k[i] == k[t] && w[i] > w[t])) t = i;
+  }
+  int u = -1;
+  for (int i = 0; i < 4; i++) {
+    if (k[i] != k[t] && (u < 0 || s[i] > s[u] || (k[i] == k[u] && w[i] > w[u]))) u = i;
+  }
+  topKey = k[t];
+  secKey = u < 0 ? k[t] : k[u];
+  margin = s[t] - (u < 0 ? 0.0 : s[u]);
+  return c[t];
+}
 
 void main() {
   ivec2 tc = ivec2(floor(vWorldPos));
   if (tc.x < 0 || tc.y < 0 || tc.x >= int(uMapSize.x) || tc.y >= int(uMapSize.y))
     discard;
+
+  // Edge fade toward empty ground when smoothing (1 = fully covered).
+  float edgeAlpha = 1.0;
+  if (uSmooth == 1) {
+    uint topKey, secKey;
+    float margin;
+    tc = smoothTile(vWorldPos, topKey, margin, secKey);
+    float cover = clamp(0.5 + margin / max(fwidth(margin), 1e-4), 0.5, 1.0);
+    // Only fade where the other side is bare ground; edges between two
+    // regions sit under the border stamp.
+    if ((secKey >> 1) == 0u) edgeAlpha = cover;
+  }
 
   uint raw = texelFetch(uTileTex, tc, 0).r;
   uint owner = raw & uint(OWNER_MASK);
@@ -50,7 +111,7 @@ void main() {
   if (fallout) {
     float h = fract(sin(float(tc.x) * 12.9898 + float(tc.y) * 78.233) * 43758.5453);
     float noise = uStaleNukeBase + h * uStaleNukeVariation;
-    fragColor = vec4(uStaleNukeColor + vec3(noise), uStaleNukeAlpha);
+    fragColor = vec4(uStaleNukeColor + vec3(noise), uStaleNukeAlpha * edgeAlpha);
     return;
   }
 
@@ -58,7 +119,7 @@ void main() {
   // border color BorderStampPass draws in alt-view).
   if (uAltView != 0) {
     vec3 rel = texelFetch(uAffiliation, ivec2(int(owner), 0), 0).rgb;
-    fragColor = vec4(rel, uAltFillAlpha);
+    fragColor = vec4(rel, uAltFillAlpha * edgeAlpha);
     return;
   }
 
@@ -80,7 +141,9 @@ void main() {
     uvec2 anchor = texelFetch(uSkinAnchor, ivec2(int(owner), 0), 0).rg;
     vec2 anchorOffset = (anchor == uvec2(0u)) ? vec2(0.0) : vec2(anchor);
 
-    vec2 skinUV = (vec2(tc) - anchorOffset) / vec2(SKIN_DIM) + vec2(0.5);
+    // Sampled per pixel (not per tile) when smoothing, so skins stay smooth.
+    vec2 skinPos = uSmooth == 1 ? vWorldPos - 0.5 : vec2(tc);
+    vec2 skinUV = (skinPos - anchorOffset) / vec2(SKIN_DIM) + vec2(0.5);
     vec4 skin = texture(uSkinAtlas, vec3(skinUV, float(skinLayerPlus1) - 1.0));
     bool inBounds =
       skinUV.x >= 0.0 && skinUV.x <= 1.0 &&
@@ -136,7 +199,7 @@ void main() {
     color.rgb = mix(vec3(luma), color.rgb, uSaturation);
   }
 
-  color.a = uTerritoryAlpha;
+  color.a = uTerritoryAlpha * edgeAlpha;
 
   fragColor = color;
 }

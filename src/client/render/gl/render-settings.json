@@ -73,6 +73,7 @@
     "lightRadiusMultiplier": 1
   },
   "mapOverlay": {
+    "smoothEdges": true,
     "navalHighlight": false,
     "trailAlpha": 0.588,
     "spiralResolutionScale": 0.25,

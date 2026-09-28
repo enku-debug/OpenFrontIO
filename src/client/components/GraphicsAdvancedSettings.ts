@@ -548,6 +548,17 @@ export class GraphicsAdvancedSettings extends LitElement {
     this.patchMapOverlay({ navalHighlight: !this.currentNavalHighlight() });
   }
 
+  private currentSmoothEdges(): boolean {
+    return (
+      this.userSettings.graphicsOverrides().mapOverlay?.smoothEdges ??
+      renderDefaults.mapOverlay.smoothEdges
+    );
+  }
+
+  private onToggleSmoothEdges() {
+    this.patchMapOverlay({ smoothEdges: !this.currentSmoothEdges() });
+  }
+
   private currentClassicBotColors(): boolean {
     return this.userSettings.graphicsOverrides().classicBotColors ?? false;
   }
@@ -1173,6 +1184,14 @@ export class GraphicsAdvancedSettings extends LitElement {
 
       <!-- 🗺️ Map -->
       ${GraphicsAdvancedSettings.section("graphics_setting.section_map")}
+      <setting-toggle
+        label=${translateText("graphics_setting.smooth_edges_label")}
+        description=${translateText("graphics_setting.smooth_edges_desc")}
+        id="smooth-edges-toggle"
+        .checked=${this.currentSmoothEdges()}
+        @change=${this.onToggleSmoothEdges}
+      ></setting-toggle>
+
       <setting-toggle
         label=${translateText("graphics_setting.naval_hover_highlight_label")}
         description=${translateText(

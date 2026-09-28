@@ -53,6 +53,9 @@ export function applyGraphicsOverrides(
   if (overrides.mapOverlay?.navalHighlight !== undefined) {
     settings.mapOverlay.navalHighlight = overrides.mapOverlay.navalHighlight;
   }
+  if (overrides.mapOverlay?.smoothEdges !== undefined) {
+    settings.mapOverlay.smoothEdges = overrides.mapOverlay.smoothEdges;
+  }
   if (overrides.mapOverlay?.highlightFillBrighten !== undefined) {
     settings.mapOverlay.highlightFillBrighten =
       overrides.mapOverlay.highlightFillBrighten;

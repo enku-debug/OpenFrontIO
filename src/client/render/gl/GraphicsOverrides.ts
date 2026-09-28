@@ -39,6 +39,8 @@ export const GraphicsOverridesSchema = z
     mapOverlay: z
       .object({
         navalHighlight: z.boolean(),
+        // Smooth, anti-aliased coast/territory/border edges (vs. square tiles).
+        smoothEdges: z.boolean(),
         highlightFillBrighten: z.number(),
         highlightBrighten: z.number(),
         highlightThicken: z.number(),
