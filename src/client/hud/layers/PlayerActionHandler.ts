@@ -1,5 +1,6 @@
 import { EventBus } from "../../../core/EventBus";
 import { TileRef } from "../../../core/game/GameMap";
+import { attackForce } from "../../AttackForce";
 import {
   SendAllianceExtensionIntentEvent,
   SendAllianceRequestIntentEvent,
@@ -28,11 +29,16 @@ export class PlayerActionHandler {
     targetId: string | null,
     direction: TileRef | null = null,
   ) {
+    const force = attackForce(player, this.uiState);
+    if (force === null) return;
     this.eventBus.emit(
       new SendAttackIntentEvent(
         targetId,
-        this.uiState.attackRatio * player.troops(),
+        force.amount,
         direction,
+        null,
+        [],
+        force.armored,
       ),
     );
   }

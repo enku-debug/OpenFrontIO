@@ -102,6 +102,13 @@ export class PlayerExecution implements Execution {
     // Record stats
     this.mg.stats().goldWork(this.player, goldFromWorkers);
 
+    // Losing a Tank Factory (captured, nuked, deleted) lowers the tank cap:
+    // reserve tanks beyond it are scrapped.
+    const tankCap = this.config.maxTanks(this.player);
+    if (this.player.tanks() > tankCap) {
+      this.player.removeTanks(this.player.tanks() - tankCap);
+    }
+
     for (const alliance of this.player.alliances()) {
       if (alliance.expiresAt() <= this.mg.ticks()) {
         alliance.expire();
@@ -762,6 +769,7 @@ export class PlayerExecution implements Execution {
     // Delete any remaining gold, non-nuke units and alliances
     const gold = this.player.gold();
     this.player.removeGold(gold);
+    this.player.removeTanks(this.player.tanks());
 
     this.player.units().forEach((u) => {
       if (

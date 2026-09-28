@@ -152,6 +152,10 @@
       "Missile Silo": {
         "scale": 1.55,
         "iconFill": 0.85
+      },
+      "Tank Factory": {
+        "scale": 1.4,
+        "iconFill": 0.85
       }
     },
     "highlightOutlineWidth": 0.04,

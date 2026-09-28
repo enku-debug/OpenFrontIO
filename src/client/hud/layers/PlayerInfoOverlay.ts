@@ -364,6 +364,7 @@ export class PlayerInfoOverlay extends LitElement implements Controller {
     const maxTroops = this.game.config().maxTroops(player);
     const attackingTroops = player
       .outgoingAttacks()
+      .filter((a) => !a.armored)
       .map((a) => a.troops)
       .reduce((a, b) => a + b, 0);
     const totalTroops = player.troops();

@@ -108,6 +108,10 @@ export class AttackExecution implements Execution {
     // Points a drawn path passes through, in order (0 to AIM_MAX_VIA tiles —
     // a freehand line): it runs aimFromTile -> aimVia... -> directionTile.
     private aimVia: TileRef[] = [],
+    // Tank attack: startTroops and the attack's troops count tanks, taken
+    // from the owner's tanks instead of troops (Config.tankPower converts
+    // them to troop strength for attackLogic).
+    private armored: boolean = false,
   ) {}
 
   public targetID(): PlayerID | null {
@@ -189,10 +193,24 @@ export class AttackExecution implements Execution {
       return;
     }
 
+    if (this.armored) {
+      // Tanks only ever leave through an attack intent, never by boat.
+      if (this.sourceTile !== null) {
+        this.active = false;
+        return;
+      }
+      this.startTroops = this._owner.removeTanks(
+        Math.min(this._owner.tanks(), this.startTroops ?? this._owner.tanks()),
+      );
+      if (this.startTroops < 1) {
+        this.active = false;
+        return;
+      }
+    }
     this.startTroops ??= this.mg
       .config()
       .attackAmount(this._owner, this.target);
-    if (this.removeTroops) {
+    if (this.removeTroops && !this.armored) {
       this.startTroops = Math.min(this._owner.troops(), this.startTroops);
       // Take the amount that was actually deducted, not the amount asked for.
       // removeTroops() floors, so a fractional request leaves the attack
@@ -205,6 +223,7 @@ export class AttackExecution implements Execution {
       this.startTroops,
       this.sourceTile,
       new Set<TileRef>(),
+      this.armored,
     );
 
     if (this.sourceTile !== null) {
@@ -213,11 +232,17 @@ export class AttackExecution implements Execution {
       this.refreshToConquer();
     }
 
-    // Record stats
-    this.mg.stats().attack(this._owner, this.target, this.startTroops);
+    // Record stats (tanks as their troop strength)
+    this.mg
+      .stats()
+      .attack(this._owner, this.target, this.asTroops(this.startTroops));
 
     for (const incoming of this._owner.incomingAttacks()) {
-      if (incoming.attacker() === this.target) {
+      // Opposing attacks cancel out only like for like (tanks vs tanks).
+      if (
+        incoming.attacker() === this.target &&
+        incoming.armored() === this.armored
+      ) {
         // Target has opposing attack, cancel them out
         if (incoming.troops() > this.attack.troops()) {
           incoming.setTroops(incoming.troops() - this.attack.troops());
@@ -235,7 +260,9 @@ export class AttackExecution implements Execution {
         outgoing !== this.attack &&
         outgoing.target() === this.attack.target() &&
         // Boat attacks (sourceTile is not null) are not combined with other attacks
-        this.attack.sourceTile() === null
+        this.attack.sourceTile() === null &&
+        // Tank and troop attacks run side by side, never merged.
+        outgoing.armored() === this.armored
       ) {
         this.attack.setTroops(this.attack.troops() + outgoing.troops());
         outgoing.delete();
@@ -247,7 +274,9 @@ export class AttackExecution implements Execution {
     // execution absorbs the earlier ones above. Recorded before the loops it
     // would measure one click, and would count an attack that cancelled out
     // and never landed.
-    this.mg.stats().attackMaxIncoming(this.target, this.attack.troops());
+    this.mg
+      .stats()
+      .attackMaxIncoming(this.target, this.asTroops(this.attack.troops()));
 
     if (this.target.isPlayer()) {
       const difficulty = this.mg.config().gameConfig().difficulty;
@@ -377,7 +406,7 @@ export class AttackExecution implements Execution {
     }
 
     const deaths = this.attack.troops() * (malusPercent / 100);
-    if (deaths) {
+    if (deaths && !this.armored) {
       this.mg.displayMessage(
         "events_display.attack_cancelled_retreat",
         MessageType.ATTACK_CANCELLED,
@@ -394,15 +423,27 @@ export class AttackExecution implements Execution {
     }
 
     const survivors = this.attack.troops() - deaths;
-    this._owner.addTroops(survivors);
+    if (this.armored) {
+      // Only whole tanks come back.
+      this._owner.addTanks(survivors);
+    } else {
+      this._owner.addTroops(survivors);
+    }
     this.attack.delete();
     this.active = false;
 
     // Not all retreats are canceled attacks
     if (this.attack.retreated()) {
       // Record stats
-      this.mg.stats().attackCancel(this._owner, this.target, survivors);
+      this.mg
+        .stats()
+        .attackCancel(this._owner, this.target, this.asTroops(survivors));
     }
+  }
+
+  /** Attack units in troops: tanks count as their troop strength. */
+  private asTroops(units: number): number {
+    return this.armored ? units * this.mg.config().tankPower() : units;
   }
 
   tick(ticks: number) {
@@ -479,10 +520,17 @@ export class AttackExecution implements Execution {
       const { attackerTroopLoss, defenderTroopLoss, tickFraction } = this.mg
         .config()
         .attackLogic(
-          this.attackLogicInput(troopCount, tileToConquer, borderSize),
+          this.attackLogicInput(
+            this.asTroops(troopCount),
+            tileToConquer,
+            borderSize,
+          ),
         );
       tickBudget -= tickFraction;
-      troopCount -= attackerTroopLoss;
+      // Losses come back in troops; a tank attack loses them as tanks.
+      troopCount -= this.armored
+        ? attackerTroopLoss / this.mg.config().tankPower()
+        : attackerTroopLoss;
       this.attack.setTroops(troopCount);
       if (targetPlayer) {
         targetPlayer.removeTroops(defenderTroopLoss);
@@ -533,6 +581,7 @@ export class AttackExecution implements Execution {
         ? this.mg.numTilesWithFallout() / this.mg.numLandTiles()
         : null,
       borderSize,
+      armored: this.armored,
     };
   }
 
@@ -677,6 +726,7 @@ export class AttackExecution implements Execution {
       directionTile: this.directionTile,
       aimFromTile: this.aimFromTile,
       aimVia: [...this.aimVia],
+      armored: this.armored,
     });
   }
 
@@ -707,6 +757,7 @@ export class AttackExecution implements Execution {
     this.directionTile = s.directionTile;
     this.aimFromTile = s.aimFromTile;
     this.aimVia = [...s.aimVia];
+    this.armored = s.armored;
     // Derived, non-persisted fields: a restored object skips the field
     // initializers, so set them here exactly as a live one would have them.
     if (s.initialized) {
@@ -742,13 +793,14 @@ const AttackExecutionStateSchema = z.object({
   directionTile: zTile().nullable(),
   aimFromTile: zTile().nullable(),
   aimVia: z.array(zTile()),
+  armored: z.boolean(),
 });
 type AttackExecutionState = z.infer<typeof AttackExecutionStateSchema>;
 
 export const AttackExecutionSnapshot = execSnapshotType({
   name: "Attack",
-  // Bumped: v2 added directionTile, v3 aimFromTile, v4 aimVia.
-  version: 4,
+  // Bumped: v2 added directionTile, v3 aimFromTile, v4 aimVia, v5 armored.
+  version: 5,
   schema: AttackExecutionStateSchema,
   migrations: {
     // v1 snapshots predate directional attacks: they were always undirected.
@@ -757,6 +809,8 @@ export const AttackExecutionSnapshot = execSnapshotType({
     2: (data) => ({ ...data, aimFromTile: null }),
     // v3 snapshots predate bent aim paths: every arrow was straight.
     3: (data) => ({ ...data, aimVia: [] }),
+    // v4 snapshots predate tanks: every attack was troops.
+    4: (data) => ({ ...data, armored: false }),
   },
   cls: () => AttackExecution,
 });

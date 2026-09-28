@@ -40,6 +40,7 @@ describe("keybind capture over a live game", () => {
         rocketDirectionUp: true,
         upgradeMultiplier: 1,
         directionalAimMode: false,
+        tankMode: false,
       },
       document.createElement("canvas"),
       eventBus,

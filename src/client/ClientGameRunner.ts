@@ -34,6 +34,7 @@ import {
   UserSettings,
 } from "../core/game/UserSettings";
 import { WorkerClient } from "../core/worker/WorkerClient";
+import { attackForce } from "./AttackForce";
 import { isDesktopShell } from "./DesktopShell";
 import { GameMetrics } from "./GameMetrics";
 import { showInGameAlert } from "./InGameModal";
@@ -1236,11 +1237,16 @@ export class ClientGameRunner {
       .actions(tile, [UnitType.TransportShip])
       .then((actions) => {
         if (actions.canAttack) {
+          const force = attackForce(this.myPlayer!, this.renderer.uiState);
+          if (force === null) return;
           this.eventBus.emit(
             new SendAttackIntentEvent(
               this.gameView.owner(tile).id(),
-              this.myPlayer!.troops() * this.renderer.uiState.attackRatio,
+              force.amount,
               tile,
+              null,
+              [],
+              force.armored,
             ),
           );
         } else if (this.canAutoBoat(actions.buildableUnits, tile)) {
@@ -1405,11 +1411,16 @@ export class ClientGameRunner {
       .actions(tile, null)
       .then((actions) => {
         if (actions.canAttack) {
+          const force = attackForce(this.myPlayer!, this.renderer.uiState);
+          if (force === null) return;
           this.eventBus.emit(
             new SendAttackIntentEvent(
               this.gameView.owner(tile).id(),
-              this.myPlayer!.troops() * this.renderer.uiState.attackRatio,
+              force.amount,
               tile,
+              null,
+              [],
+              force.armored,
             ),
           );
         }

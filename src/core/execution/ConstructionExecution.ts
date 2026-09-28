@@ -159,6 +159,10 @@ export class ConstructionExecution implements Execution {
       case UnitType.Factory:
         this.mg.addExecution(new FactoryExecution(this.structure!));
         break;
+      case UnitType.TankFactory:
+        // Nothing runs on its own: each finished level raises the tank cap
+        // (Config.maxTanks), and tanks are bought via BuyTanksExecution.
+        break;
       default:
         console.warn(
           `unit type ${this.constructionType} cannot be constructed`,
@@ -175,6 +179,7 @@ export class ConstructionExecution implements Execution {
       case UnitType.SAMLauncher:
       case UnitType.City:
       case UnitType.Factory:
+      case UnitType.TankFactory:
         return true;
       default:
         return false;

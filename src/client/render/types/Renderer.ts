@@ -41,6 +41,8 @@ export interface AttackData {
   troops: number;
   id: string;
   retreating: boolean;
+  /** Tank attack: troops then counts tanks. Absent = troops. */
+  armored?: boolean;
 }
 
 export interface AllianceData {
@@ -75,6 +77,8 @@ export interface PlayerState {
   /** Cumulative gold received from all sources (live). */
   goldEarned: number;
   troops: number;
+  /** Tanks in reserve (not counting those out on attacks). */
+  tanks: number;
   isTraitor: boolean;
   traitorRemainingTicks: number;
   inDoomsdayClock: boolean;

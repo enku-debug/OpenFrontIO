@@ -54,7 +54,8 @@ export type Intent =
   | KickPlayerIntent
   | TogglePauseIntent
   | UpdateGameConfigIntent
-  | ToggleGameStartTimer;
+  | ToggleGameStartTimer
+  | BuyTanksIntent;
 
 export type AttackIntent = z.infer<typeof AttackIntentSchema>;
 export type CancelAttackIntent = z.infer<typeof CancelAttackIntentSchema>;
@@ -91,6 +92,7 @@ export type UpdateGameConfigIntent = z.infer<
 export type ToggleGameStartTimer = z.infer<
   typeof ToggleGameStartTimerIntentSchema
 >;
+export type BuyTanksIntent = z.infer<typeof BuyTanksIntentSchema>;
 
 export type Turn = z.infer<typeof TurnSchema>;
 export type GameConfig = z.infer<typeof GameConfigSchema>;
@@ -690,6 +692,15 @@ export const AttackIntentSchema = z.object({
   // Points the drawn path passes through between aimFrom and direction, in
   // order (a freehand line, at most AIM_MAX_VIA points).
   aimVia: z.array(zb.uint()).max(AIM_MAX_VIA).optional(),
+  // Tank attack: `troops` is then a number of tanks, taken from the
+  // player's tanks instead of their troops.
+  armored: z.boolean().optional(),
+});
+
+// Buy tanks with gold, up to the player's tank cap (Config.maxTanks).
+export const BuyTanksIntentSchema = z.object({
+  type: z.literal("buy_tanks"),
+  count: zb.uint(),
 });
 
 export const SpawnIntentSchema = z.object({
@@ -861,6 +872,8 @@ export const IntentSchema = z.discriminatedUnion("type", [
   TogglePauseIntentSchema,
   UpdateGameConfigIntentSchema,
   ToggleGameStartTimerIntentSchema,
+  // Appended last: the wire encodes the union member by position.
+  BuyTanksIntentSchema,
 ]);
 
 // StampedIntent = Intent with server-stamped clientID (used in turns and execution)

@@ -30,6 +30,8 @@ export class AttackImpl implements Attack {
     private _sourceTile: TileRef | null,
     private _border: Set<number>,
     private _mg: GameImpl,
+    // Tank attack: _troops counts tanks.
+    private _armored: boolean = false,
   ) {}
 
   sourceTile(): TileRef | null {
@@ -47,6 +49,9 @@ export class AttackImpl implements Attack {
   }
   setTroops(troops: number) {
     this._troops = Math.max(0, troops);
+  }
+  armored(): boolean {
+    return this._armored;
   }
 
   isActive() {
@@ -202,6 +207,7 @@ export class AttackImpl implements Attack {
       target: w.owner(this._target),
       attacker: w.player(this._attacker),
       troops: this._troops,
+      armored: this._armored,
       sourceTile: this._sourceTile,
       border: w.tiles(this._border),
       borderSize: this._borderSize,
@@ -218,6 +224,7 @@ export class AttackImpl implements Attack {
     this._target = r.owner(s.target);
     this._attacker = r.player(s.attacker);
     this._troops = s.troops;
+    this._armored = s.armored;
     this._sourceTile = s.sourceTile;
     this._border = new Set(s.border);
     this._borderSize = s.borderSize;
@@ -229,12 +236,14 @@ export class AttackImpl implements Attack {
 
 export const AttackSnapshot = snapshotType({
   name: "Attack",
-  version: 1,
+  // v2 added armored (tank attacks).
+  version: 2,
   schema: z.object({
     id: z.string(),
     target: zPlayerRef(),
     attacker: zPlayerRef(),
     troops: zNum(),
+    armored: z.boolean(),
     sourceTile: zTile().nullable(),
     border: zTiles(),
     borderSize: zInt(),
@@ -242,5 +251,9 @@ export const AttackSnapshot = snapshotType({
     retreating: z.boolean(),
     retreated: z.boolean(),
   }),
+  migrations: {
+    // v1 predates tanks: every attack was troops.
+    1: (data) => ({ ...data, armored: false }),
+  },
 });
 export type AttackState = z.infer<typeof AttackSnapshot.schema>;

@@ -225,6 +225,8 @@ function queuedIntent(game: Game, p: Player, tick: number): Intent | null {
     },
     { type: "mark_disconnected", isDisconnected: false },
     { type: "toggle_pause", paused: false },
+    { type: "buy_tanks", count: 5 },
+    { type: "attack", targetID: other.id(), troops: 1, armored: true },
   ];
   return queued[(tick - 20) / 2] ?? null;
 }

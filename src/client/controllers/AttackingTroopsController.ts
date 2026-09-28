@@ -11,6 +11,7 @@
 import { EventBus } from "../../core/EventBus";
 import { Cell, PlayerType } from "../../core/game/Game";
 import { UserSettings } from "../../core/game/UserSettings";
+import { renderTanks } from "../AttackForce";
 import { Controller } from "../Controller";
 import { AlternateViewEvent } from "../InputHandler";
 import { MapRenderer } from "../render/gl";
@@ -114,7 +115,7 @@ export class AttackingTroopsController implements Controller {
       const defender = this.game.playerBySmallID(attack.targetID);
       if (!defender || !defender.isPlayer()) continue;
       activeIDs.add(attack.id);
-      this.ensureEntry(attack.id, attack.troops, false);
+      this.ensureEntry(attack.id, attack.troops, false, attack.armored);
     }
 
     // Incoming: only label attacks coming from another player; skip tribes.
@@ -128,7 +129,7 @@ export class AttackingTroopsController implements Controller {
         continue;
       }
       activeIDs.add(attack.id);
-      this.ensureEntry(attack.id, attack.troops, true);
+      this.ensureEntry(attack.id, attack.troops, true, attack.armored);
     }
 
     for (const id of this.attacks.keys()) {
@@ -158,8 +159,14 @@ export class AttackingTroopsController implements Controller {
       });
   }
 
-  private ensureEntry(attackID: string, troops: number, isIncoming: boolean) {
-    const text = renderTroops(troops);
+  private ensureEntry(
+    attackID: string,
+    troops: number,
+    isIncoming: boolean,
+    armored = false,
+  ) {
+    // Tank attacks count tanks.
+    const text = armored ? renderTanks(troops) : renderTroops(troops);
     const existing = this.attacks.get(attackID);
     if (existing) {
       existing.text = text;

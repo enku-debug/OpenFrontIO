@@ -65,6 +65,7 @@ export function createRenderer(
     rocketDirectionUp: true,
     upgradeMultiplier: 1,
     directionalAimMode: false,
+    tankMode: false,
   };
 
   //hide when the game renders

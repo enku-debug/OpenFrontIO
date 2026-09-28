@@ -1,5 +1,6 @@
 import { AttackExecution } from "../../../src/core/execution/AttackExecution";
 import { BoatRetreatExecution } from "../../../src/core/execution/BoatRetreatExecution";
+import { BuyTanksExecution } from "../../../src/core/execution/BuyTanksExecution";
 import { FactoryExecution } from "../../../src/core/execution/FactoryExecution";
 import { RetreatExecution } from "../../../src/core/execution/RetreatExecution";
 import { SpawnExecution } from "../../../src/core/execution/SpawnExecution";
@@ -108,6 +109,22 @@ describe("snapshot: land attacks", () => {
     );
     executeTicks(game, 6);
     expect(a.outgoingAttacks().length).toBe(1);
+    await expectSnapshotRoundTrip(game, MAP, 40);
+  });
+
+  test("tank attack beside a troop attack, with tanks bought and in reserve", async () => {
+    const { game, a, b } = await landGame();
+    conquerRect(game, a, 20, 10, 40, 20);
+    a.buildUnit(UnitType.TankFactory, game.ref(12, 12), {});
+    a.addTanks(60);
+    game.addExecution(
+      new AttackExecution(30, a, b.id(), null, true, null, null, [], true),
+      new AttackExecution(10_000, a, b.id()),
+      new BuyTanksExecution(a, 20),
+    );
+    executeTicks(game, 6);
+    expect(a.outgoingAttacks().filter((x) => x.armored())).toHaveLength(1);
+    expect(a.tanks()).toBeGreaterThan(30);
     await expectSnapshotRoundTrip(game, MAP, 40);
   });
 

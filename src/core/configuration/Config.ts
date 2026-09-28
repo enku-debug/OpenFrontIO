@@ -107,6 +107,11 @@ export interface AttackLogicInput {
   falloutRatio: number | null;
   /** Tiles on the attack front this tick (plus jitter); fixed for the tick. */
   borderSize: number;
+  /**
+   * Tank attack. attackTroops is then the tanks' strength in troops
+   * (tanks × tankPower) and attackerTroopLoss comes back in the same unit.
+   */
+  armored?: boolean;
 }
 
 export interface AttackLogicResult {
@@ -384,6 +389,49 @@ export class Config {
 
   defensePostSpeedBonus(): number {
     return 3;
+  }
+
+  // ---- Tanks: an armored force bought with gold, separate from troops ----
+
+  /** Combat strength of one tank, in troops. */
+  tankPower(): number {
+    return 1_000;
+  }
+
+  /** Tanks each Tank Factory level lets a player keep. */
+  tanksPerFactoryLevel(): number {
+    return 100;
+  }
+
+  /** Gold price of one tank (free with infinite gold). */
+  tankCost(player: Player | PlayerView): Gold {
+    return this.hasInfiniteGoldFor(player) ? 0n : 1_000n;
+  }
+
+  /** Most tanks a player may hold: finished Tank Factory levels × per-level cap. */
+  maxTanks(player: Player | PlayerView): number {
+    return (
+      player
+        .units(UnitType.TankFactory)
+        .filter((u) => !u.isUnderConstruction())
+        .map((f) => f.level())
+        .reduce((a, b) => a + b, 0) * this.tanksPerFactoryLevel()
+    );
+  }
+
+  /** Tank attacks lose this share of what troops would (tougher). */
+  tankLossFactor(): number {
+    return 0.65;
+  }
+
+  /** Tank attacks take this many times longer per tile (slower). */
+  tankSlowdown(): number {
+    return 1.6;
+  }
+
+  /** Against Defense Post cover, tanks are this many times more effective. */
+  tankDefensePostAdvantage(): number {
+    return 1.5;
   }
 
   playerTeams(): TeamCountConfig {
@@ -688,6 +736,17 @@ export class Config {
           upgradable: true,
         };
         break;
+      case UnitType.TankFactory:
+        // Each level raises the tank cap by tanksPerFactoryLevel().
+        info = {
+          cost: this.costWrapper(
+            (numUnits: number) => Math.min(1_000_000, pow2(numUnits) * 150_000),
+            UnitType.TankFactory,
+          ),
+          constructionDuration: this.instantBuild() ? 0 : 5 * 10,
+          upgradable: true,
+        };
+        break;
       case UnitType.Train:
         info = {
           cost: () => 0n,
@@ -880,12 +939,27 @@ export class Config {
    * attack is. The result reports that as a fraction of the tick.
    */
   attackLogic(input: AttackLogicInput): AttackLogicResult {
+    const result = this.baseAttackLogic(input);
+    if (input.armored !== true) return result;
+    // Tanks: slower, but lose fewer units per tile.
+    return {
+      attackerTroopLoss: result.attackerTroopLoss * this.tankLossFactor(),
+      defenderTroopLoss: result.defenderTroopLoss,
+      tickFraction: result.tickFraction * this.tankSlowdown(),
+    };
+  }
+
+  private baseAttackLogic(input: AttackLogicInput): AttackLogicResult {
     const { attackTroops, attacker, defender } = input;
     let { mag, tileCost } = terrainAttackBase(input.terrain);
 
     if (defender !== null && input.defenderHasDefensePost) {
-      mag *= this.defensePostDefenseBonus();
-      tileCost *= this.defensePostSpeedBonus();
+      // Tanks break through defense lines: the post's loss and speed
+      // bonuses count tankDefensePostAdvantage() times less against them.
+      const vsTanks =
+        input.armored === true ? this.tankDefensePostAdvantage() : 1;
+      mag *= this.defensePostDefenseBonus() / vsTanks;
+      tileCost *= this.defensePostSpeedBonus() / vsTanks;
     }
     if (input.falloutRatio !== null) {
       const fallout = this.falloutDefenseModifier(input.falloutRatio);

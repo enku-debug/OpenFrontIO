@@ -27,6 +27,7 @@ function makePlayerState(overrides: Partial<PlayerState> = {}): PlayerState {
     piracyGold: 0,
     goldEarned: 0,
     troops: 100,
+    tanks: 0,
     isTraitor: false,
     traitorRemainingTicks: 0,
     inDoomsdayClock: false,

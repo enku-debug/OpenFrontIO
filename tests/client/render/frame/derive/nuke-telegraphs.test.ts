@@ -40,6 +40,7 @@ function ps(overrides: Partial<PlayerState> = {}): PlayerState {
     piracyGold: 0,
     goldEarned: 0,
     troops: 0,
+    tanks: 0,
     isTraitor: false,
     traitorRemainingTicks: 0,
     inDoomsdayClock: false,

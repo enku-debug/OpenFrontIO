@@ -8,6 +8,7 @@ import { AllianceRequestExecution } from "./alliance/AllianceRequestExecution";
 import { BreakAllianceExecution } from "./alliance/BreakAllianceExecution";
 import { AttackExecution } from "./AttackExecution";
 import { BoatRetreatExecution } from "./BoatRetreatExecution";
+import { BuyTanksExecution } from "./BuyTanksExecution";
 import { ConstructionExecution } from "./ConstructionExecution";
 import { DeleteUnitExecution } from "./DeleteUnitExecution";
 import { DonateGoldExecution } from "./DonateGoldExecution";
@@ -71,8 +72,11 @@ export class Executor {
           intent.direction ?? null,
           intent.aimFrom ?? null,
           intent.aimVia ?? [],
+          intent.armored ?? false,
         );
       }
+      case "buy_tanks":
+        return new BuyTanksExecution(player, intent.count);
       case "cancel_attack":
         return new RetreatExecution(player, intent.attackID);
       case "cancel_boat":

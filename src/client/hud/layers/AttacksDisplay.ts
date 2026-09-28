@@ -8,6 +8,7 @@ import {
   GameUpdateType,
   UnitIncomingUpdate,
 } from "../../../core/game/GameUpdates";
+import { renderTanks } from "../../AttackForce";
 import { Controller } from "../../Controller";
 import { themeProvider } from "../../theme/ThemeProvider";
 import {
@@ -25,6 +26,7 @@ import { renderTroops, translateText } from "../../Utils";
 import { GameView, PlayerView, UnitView } from "../../view";
 import { getColoredSprite } from "../SpriteLoader";
 const soldierIcon = assetUrl("images/SoldierIcon.svg");
+const tankIcon = assetUrl("images/TankIconWhite.svg");
 const swordIcon = assetUrl("images/SwordIcon.svg");
 
 @customElement("attacks-display")
@@ -201,11 +203,22 @@ export class AttacksDisplay extends LitElement implements Controller {
     const myPlayer = this.game.myPlayer();
     if (!myPlayer) return;
 
+    // A tank attack is answered with troops of about its strength.
+    const strength = attack.armored
+      ? attack.troops * this.game.config().tankPower()
+      : attack.troops;
     const counterTroops = Math.min(
-      attack.troops,
+      strength,
       this.uiState.attackRatio * myPlayer.troops(),
     );
     this.eventBus.emit(new SendAttackIntentEvent(attacker.id(), counterTroops));
+  }
+
+  /** Troops, or "12 tanks" for a tank attack. */
+  private renderAmount(attack: AttackUpdate) {
+    return attack.armored
+      ? renderTanks(attack.troops)
+      : renderTroops(attack.troops);
   }
 
   private renderIncomingAttacks() {
@@ -219,11 +232,11 @@ export class AttacksDisplay extends LitElement implements Controller {
           ${this.renderButton({
             content: html`<span class="inline-flex items-center"
                 ><img
-                  src="${soldierIcon}"
+                  src="${attack.armored ? tankIcon : soldierIcon}"
                   class="h-4 w-4"
                   style="filter: brightness(0) saturate(100%) invert(27%) sepia(91%) saturate(4551%) hue-rotate(348deg) brightness(89%) contrast(97%)"
                 />↓</span
-              ><span class="ml-1">${renderTroops(attack.troops)}</span>
+              ><span class="ml-1">${this.renderAmount(attack)}</span>
               <span class="truncate ml-1"
                 >${(
                   this.game.playerBySmallID(attack.attackerID) as PlayerView
@@ -266,11 +279,11 @@ export class AttacksDisplay extends LitElement implements Controller {
           ${this.renderButton({
             content: html`<span class="inline-flex items-center"
                 ><img
-                  src="${soldierIcon}"
+                  src="${attack.armored ? tankIcon : soldierIcon}"
                   class="h-4 w-4"
                   style="filter: brightness(0) saturate(100%) invert(62%) sepia(80%) saturate(500%) hue-rotate(175deg) brightness(100%)"
                 />↑</span
-              ><span class="ml-1">${renderTroops(attack.troops)}</span>
+              ><span class="ml-1">${this.renderAmount(attack)}</span>
               <span class="truncate ml-1"
                 >${(
                   this.game.playerBySmallID(attack.targetID) as PlayerView
@@ -307,11 +320,11 @@ export class AttacksDisplay extends LitElement implements Controller {
           ${this.renderButton({
             content: html`<span class="inline-flex items-center"
                 ><img
-                  src="${soldierIcon}"
+                  src="${landAttack.armored ? tankIcon : soldierIcon}"
                   class="h-4 w-4"
                   style="filter: brightness(0) saturate(100%) invert(62%) sepia(80%) saturate(500%) hue-rotate(175deg) brightness(100%)"
                 />↑</span
-              ><span class="ml-1">${renderTroops(landAttack.troops)}</span>
+              ><span class="ml-1">${this.renderAmount(landAttack)}</span>
               ${translateText("help_modal.ui_wilderness")}`,
             className:
               "text-left text-aquarius inline-flex items-center gap-0.5 lg:gap-1 min-w-0",

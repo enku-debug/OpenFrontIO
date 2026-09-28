@@ -139,6 +139,8 @@ export class PlayerImpl implements Player {
 
   private _gold: bigint;
   private _troops: bigint;
+  /** Tanks in reserve (whole tanks); tanks out on attacks are in the Attack. */
+  private _tanks: number = 0;
 
   /** Cumulative ship-trade revenue (arrival credit for src + dst port owners). */
   private _tradeGold: bigint = 0n;
@@ -351,6 +353,7 @@ export class PlayerImpl implements Player {
               troops: a.troops(),
               id: a.id(),
               retreating: a.retreating(),
+              armored: a.armored(),
             } satisfies AttackUpdate;
           });
 
@@ -365,6 +368,7 @@ export class PlayerImpl implements Player {
             troops: a.troops(),
             id: a.id(),
             retreating: a.retreating(),
+            armored: a.armored(),
           } satisfies AttackUpdate;
         });
       }
@@ -397,6 +401,7 @@ export class PlayerImpl implements Player {
       piracyGold: this._piracyGold,
       goldEarned: this._goldEarned,
       troops: this.troops(),
+      tanks: this._tanks,
       allies: allies,
       embargoes: embargoes,
       isTraitor: this.isTraitor(),
@@ -1382,6 +1387,25 @@ export class PlayerImpl implements Player {
     return Number(toRemove);
   }
 
+  tanks(): number {
+    return this._tanks;
+  }
+
+  addTanks(tanks: number): void {
+    if (tanks < 0) {
+      this.removeTanks(-tanks);
+      return;
+    }
+    this._tanks += Math.floor(tanks);
+  }
+
+  removeTanks(tanks: number): number {
+    if (tanks <= 0) return 0;
+    const toRemove = Math.min(this._tanks, Math.floor(tanks));
+    this._tanks -= toRemove;
+    return toRemove;
+  }
+
   captureUnit(unit: Unit): void {
     if (unit.owner() === this) {
       throw new Error(`Cannot capture unit, ${this} already owns ${unit}`);
@@ -1616,6 +1640,7 @@ export class PlayerImpl implements Player {
       case UnitType.SAMLauncher:
       case UnitType.City:
       case UnitType.Factory:
+      case UnitType.TankFactory:
         return this.landBasedStructureSpawn(targetTile, validTiles);
       default:
         assertNever(unitType);
@@ -1881,6 +1906,7 @@ export class PlayerImpl implements Player {
     troops: number,
     sourceTile: TileRef | null,
     border: Set<number>,
+    armored: boolean = false,
   ): Attack {
     const attack = new AttackImpl(
       this._pseudo_random.nextID(),
@@ -1890,6 +1916,7 @@ export class PlayerImpl implements Player {
       sourceTile,
       border,
       this.mg,
+      armored,
     );
     this._outgoingAttacks.push(attack);
     if (target.isPlayer()) {
@@ -1973,6 +2000,7 @@ export class PlayerImpl implements Player {
       random: w.random(this._pseudo_random),
       gold: this._gold,
       troops: this._troops,
+      tanks: this._tanks,
       tradeGold: this._tradeGold,
       trainGold: this._trainGold,
       piracyGold: this._piracyGold,
@@ -2045,6 +2073,7 @@ export class PlayerImpl implements Player {
     this._pseudo_random = r.random(s.random);
     this._gold = s.gold;
     this._troops = s.troops;
+    this._tanks = s.tanks;
     this._tradeGold = s.tradeGold;
     this._trainGold = s.trainGold;
     this._piracyGold = s.piracyGold;
@@ -2110,7 +2139,8 @@ export class PlayerImpl implements Player {
 
 export const PlayerSnapshot = snapshotType({
   name: "Player",
-  version: 1,
+  // v2 added tanks.
+  version: 2,
   schema: z.object({
     smallID: zInt(),
     info: PlayerInfoSchema,
@@ -2120,6 +2150,7 @@ export const PlayerSnapshot = snapshotType({
     random: zRandom(),
     gold: z.bigint(),
     troops: z.bigint(),
+    tanks: zInt(),
     tradeGold: z.bigint(),
     trainGold: z.bigint(),
     piracyGold: z.bigint(),
@@ -2175,5 +2206,9 @@ export const PlayerSnapshot = snapshotType({
       .optional(),
     numUnitsConstructed: z.array(z.tuple([UnitTypeSchema, zInt()])),
   }),
+  migrations: {
+    // v1 predates tanks.
+    1: (data) => ({ ...data, tanks: 0 }),
+  },
 });
 export type PlayerState = z.infer<typeof PlayerSnapshot.schema>;

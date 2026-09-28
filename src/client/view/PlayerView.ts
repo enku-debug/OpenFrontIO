@@ -87,6 +87,7 @@ function stateFromUpdate(pu: PlayerUpdate): PlayerState {
     piracyGold: Number(pu.piracyGold ?? 0n),
     goldEarned: Number(pu.goldEarned ?? 0n),
     troops: pu.troops!,
+    tanks: pu.tanks ?? 0,
     isTraitor: pu.isTraitor!,
     traitorRemainingTicks: Math.max(0, pu.traitorRemainingTicks ?? 0),
     inDoomsdayClock: pu.inDoomsdayClock ?? false,
@@ -560,6 +561,20 @@ export class PlayerView {
 
   troops(): number {
     return this.state.troops;
+  }
+
+  /** Tanks in reserve, ready to send (tanks out on attacks not included). */
+  tanks(): number {
+    return this.state.tanks;
+  }
+
+  /** Tanks out on tank attacks (a damaged tank still counts until lost). */
+  tanksDeployed(): number {
+    let n = 0;
+    for (const a of this.outgoingAttacks()) {
+      if (a.armored) n += Math.ceil(a.troops);
+    }
+    return n;
   }
 
   totalUnitLevels(type: UnitType): number {

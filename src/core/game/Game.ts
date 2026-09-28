@@ -209,6 +209,8 @@ export enum UnitType {
   MIRVWarhead = "MIRV Warhead",
   Train = "Train",
   Factory = "Factory",
+  // Appended last: the wire encodes UnitType by position.
+  TankFactory = "Tank Factory",
 }
 
 export enum TrainType {
@@ -238,6 +240,7 @@ export const Structures = unitTypeGroup([
   UnitType.MissileSilo,
   UnitType.Port,
   UnitType.Factory,
+  UnitType.TankFactory,
 ] as const);
 
 export const BuildMenus = unitTypeGroup([
@@ -310,6 +313,8 @@ export interface UnitParamsMap {
   };
 
   [UnitType.Factory]: Record<string, never>;
+
+  [UnitType.TankFactory]: Record<string, never>;
 
   [UnitType.MissileSilo]: Record<string, never>;
 
@@ -400,6 +405,8 @@ export interface Attack {
   attacker(): Player;
   troops(): number;
   setTroops(troops: number): void;
+  // Armored (tank) attack: troops() then counts tanks, not soldiers.
+  armored(): boolean;
   isActive(): boolean;
   delete(): void;
   // The tile the attack originated from, mostly used for boat attacks.
@@ -666,6 +673,12 @@ export interface Player {
   setTroops(troops: number): void;
   addTroops(troops: number): void;
   removeTroops(troops: number): number;
+  // Tanks: a separate armored force, bought with gold and capped by Tank
+  // Factory levels (Config.maxTanks). Whole tanks only.
+  tanks(): number;
+  addTanks(tanks: number): void;
+  // Removes up to `tanks` (floored); returns how many were removed.
+  removeTanks(tanks: number): number;
 
   // Units
   // Fixed-arity + array overloads instead of a rest parameter: the rest array
@@ -769,6 +782,7 @@ export interface Player {
     troops: number,
     sourceTile: TileRef | null,
     border: Set<number>,
+    armored?: boolean,
   ): Attack;
   outgoingAttacks(): Attack[];
   incomingAttacks(): Attack[];

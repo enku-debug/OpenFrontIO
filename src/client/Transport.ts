@@ -99,9 +99,15 @@ export class SendAttackIntentEvent implements GameEvent {
     // Start of a drawn aim arrow; with direction as its tip the attack only
     // advances inside a corridor along the arrow.
     public readonly aimFrom: TileRef | null = null,
-    // Bend points of that arrow, in order (up to 2).
+    // Points the drawn line passes through, in order (up to AIM_MAX_VIA).
     public readonly aimVia: TileRef[] = [],
+    // Tank attack: `troops` is then a number of tanks.
+    public readonly armored: boolean = false,
   ) {}
+}
+
+export class SendBuyTanksIntentEvent implements GameEvent {
+  constructor(public readonly count: number) {}
 }
 
 export class SendBoatAttackIntentEvent implements GameEvent {
@@ -310,6 +316,9 @@ export class Transport {
     );
     this.subscribe(SendSpawnIntentEvent, (e) => this.onSendSpawnIntentEvent(e));
     this.subscribe(SendAttackIntentEvent, (e) => this.onSendAttackIntent(e));
+    this.subscribe(SendBuyTanksIntentEvent, (e) =>
+      this.sendIntent({ type: "buy_tanks", count: Math.floor(e.count) }),
+    );
     this.subscribe(SendUpgradeStructureIntentEvent, (e) =>
       this.onSendUpgradeStructureIntent(e),
     );
@@ -807,6 +816,7 @@ export class Transport {
       direction: event.direction,
       aimFrom: event.aimFrom,
       aimVia: event.aimVia,
+      ...(event.armored ? { armored: true } : {}),
     });
   }
 

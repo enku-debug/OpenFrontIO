@@ -209,7 +209,11 @@ export class AlertFrame extends LitElement implements Controller {
           currentTick - ourAttackTick < RETALIATION_WINDOW_TICKS;
 
         // Check if attack is too small (less than 1/5 of our troops)
-        const isSmallAttack = attack.troops < minAttackTroopsThreshold;
+        // (a tank attack counts at its strength in troops)
+        const strength = attack.armored
+          ? attack.troops * this.game.config().tankPower()
+          : attack.troops;
+        const isSmallAttack = strength < minAttackTroopsThreshold;
 
         // Don't alert if:
         // 1. We're in cooldown from a recent alert

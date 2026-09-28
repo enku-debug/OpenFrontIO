@@ -176,6 +176,7 @@
       "missile_silo": "Used to launch nukes",
       "port": "Sends trade ships to generate gold",
       "sam_launcher": "Defends against incoming nukes",
+      "tank_factory": "Lets you buy tanks: +100 tank limit per level",
       "warship": "Captures trade ships, destroys ships and boats"
     },
     "not_enough_money": "Not enough money",
@@ -531,7 +532,12 @@
     "aim_no_target": "No enemy land along this arrow",
     "allied_afk_neighbor_info": "You can attack disconnected players even if you are allied with them.",
     "army_limit_warning": "You're near your army limit! Consider sending troops to teammates.",
+    "buy_tanks": "+{count}",
+    "buy_tanks_tooltip": "Buy up to {count} tanks at {cost} gold each. Your Tank Factories allow {max} tanks in total.",
     "low_troops_warning": "You are very low on troops - You should always keep some troops for defense.",
+    "tank_mode_button": "Tanks",
+    "tank_mode_tooltip": "Tank mode: clicks, the G key and Aim arrows send tanks instead of troops (attack % of your tanks). Tanks are slower but tougher, and 1.5x as strong against Defense Posts.",
+    "tanks_count": "{count} tanks",
     "teammate_afk_neighbor_info": "You can attack disconnected teammates.",
     "traitor_neighbor_info": "You can betray traitors without becoming a traitor yourself."
   },
@@ -2175,6 +2181,7 @@
     "missile_silo": "Missile Silo",
     "port": "Port",
     "sam_launcher": "SAM Launcher",
+    "tank_factory": "Tank Factory",
     "warship": "Warship"
   },
   "update_available": {
@@ -2246,6 +2253,8 @@
     "build_port_desc": "Build a Port under your cursor.",
     "build_sam_launcher": "Build SAM Launcher",
     "build_sam_launcher_desc": "Build a SAM Launcher under your cursor.",
+    "build_tank_factory": "Build Tank Factory",
+    "build_tank_factory_desc": "Build a Tank Factory under your cursor.",
     "build_warship": "Build Warship",
     "build_warship_desc": "Build a Warship under your cursor.",
     "camera_movement": "Camera Movement",

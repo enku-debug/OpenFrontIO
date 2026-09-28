@@ -12,8 +12,10 @@ import {
   USER_SETTINGS_CHANGED_EVENT,
   UserSettings,
 } from "../../../core/game/UserSettings";
+import { renderTanks } from "../../AttackForce";
 import { Controller } from "../../Controller";
 import { AttackRatioEvent } from "../../InputHandler";
+import { SendBuyTanksIntentEvent } from "../../Transport";
 import { UIState } from "../../UIState";
 import {
   getGamesPlayed,
@@ -23,10 +25,12 @@ import {
 } from "../../Utils";
 import { GameView } from "../../view";
 import { PlayerView } from "../../view/PlayerView";
-import { goldCoinIcon, soldierIcon } from "../HotbarIcons";
+import { goldCoinIcon, soldierIcon, tankIcon } from "../HotbarIcons";
 import { TutorialHighlight, TutorialHighlightEvent } from "../Tutorial";
 const swordIcon = assetUrl("images/SwordIcon.svg");
 const targetIcon = assetUrl("images/TargetIconWhite.svg");
+// Tanks bought per click of the buy button.
+const BUY_TANKS_STEP = 10;
 
 @customElement("control-panel")
 export class ControlPanel extends LitElement implements Controller {
@@ -40,6 +44,18 @@ export class ControlPanel extends LitElement implements Controller {
 
   @state()
   private directionalAimMode: boolean = false;
+
+  @state()
+  private tankMode: boolean = false;
+
+  // Tanks in reserve, out on attacks, and the Tank Factory limit.
+  @state()
+  private _tanks: number = 0;
+  @state()
+  private _tanksDeployed: number = 0;
+  @state()
+  private _maxTanks: number = 0;
+  private _tankCost: Gold = 0n;
 
   @state()
   private _maxTroops: number;
@@ -135,6 +151,9 @@ export class ControlPanel extends LitElement implements Controller {
       if (this.directionalAimMode) {
         this.toggleDirectionalAim();
       }
+      if (this.tankMode) {
+        this.toggleTankMode();
+      }
       return;
     }
 
@@ -146,8 +165,17 @@ export class ControlPanel extends LitElement implements Controller {
     this._troops = player.troops();
     this._attackingTroops = player
       .outgoingAttacks()
+      .filter((a) => !a.armored)
       .map((a) => a.troops)
       .reduce((a, b) => a + b, 0);
+    this._tanks = player.tanks();
+    this._tanksDeployed = player.tanksDeployed();
+    this._maxTanks = config.maxTanks(player);
+    this._tankCost = config.tankCost(player);
+    // No factory and no tanks left: nothing to send, leave tank mode.
+    if (this.tankMode && !this.hasTanks()) {
+      this.toggleTankMode();
+    }
     this.troopRate = config.troopIncreaseRate(player) * 10;
 
     const helpEnabled = new UserSettings().helpMessages();
@@ -372,6 +400,105 @@ export class ControlPanel extends LitElement implements Controller {
     this.uiState.directionalAimMode = this.directionalAimMode;
   }
 
+  private toggleTankMode() {
+    this.tankMode = !this.tankMode;
+    this.uiState.tankMode = this.tankMode;
+  }
+
+  /** Whether the tank row is worth showing: a factory, or tanks anywhere. */
+  private hasTanks(): boolean {
+    return this._maxTanks > 0 || this._tanks > 0 || this._tanksDeployed > 0;
+  }
+
+  private canBuyTanks(): boolean {
+    const room = this._maxTanks - this._tanks - this._tanksDeployed;
+    return room >= 1 && this._tankCost <= (this._gold ?? 0n);
+  }
+
+  private buyTanks() {
+    if (!this.canBuyTanks()) return;
+    this.eventBus.emit(new SendBuyTanksIntentEvent(BUY_TANKS_STEP));
+  }
+
+  /** "20% (1.2K)" troops, or "20% (12 tanks)" in tank mode. */
+  private attackAmountLabel(): string {
+    const pct = `${(this.attackRatio * 100).toFixed(0)}%`;
+    if (this.tankMode) {
+      const tanks =
+        this._tanks < 1
+          ? 0
+          : Math.max(1, Math.floor(this._tanks * this.attackRatio));
+      return `${pct} (${renderTanks(tanks)})`;
+    }
+    return `${pct} (${renderTroops(
+      (this.game?.myPlayer()?.troops() ?? 0) * this.attackRatio,
+    )})`;
+  }
+
+  /** Tank mode toggle, tank count / limit and the buy button. */
+  private renderTankRow(compact: boolean) {
+    if (!this.hasTanks()) return html``;
+    const canBuy = this.canBuyTanks();
+    const text = compact ? "text-xs" : "text-sm";
+    return html`
+      <div class="flex items-center gap-1.5 mt-1" translate="no">
+        <button
+          type="button"
+          @click=${() => this.toggleTankMode()}
+          title=${translateText("control_panel.tank_mode_tooltip")}
+          class="flex items-center gap-1 shrink-0 border rounded-md px-1.5 py-0.5 ${text} font-bold cursor-pointer transition-colors ${this
+            .tankMode
+            ? "border-aquarius bg-aquarius/25 text-aquarius"
+            : "border-gray-600 text-white"}"
+        >
+          <img
+            src=${tankIcon}
+            alt=""
+            aria-hidden="true"
+            width="16"
+            height="16"
+          />
+          <span>${translateText("control_panel.tank_mode_button")}</span>
+        </button>
+        <div
+          class="flex-1 flex items-center gap-1 border border-gray-600 rounded-md px-1.5 py-0.5 ${text} font-bold text-white tabular-nums"
+        >
+          <span>${this._tanks}</span>
+          ${this._tanksDeployed > 0
+            ? html`<span class="text-aquarius">+${this._tanksDeployed}</span>`
+            : ""}
+          <span class="text-gray-400">/ ${this._maxTanks}</span>
+        </div>
+        <button
+          type="button"
+          ?disabled=${!canBuy}
+          @click=${() => this.buyTanks()}
+          title=${translateText("control_panel.buy_tanks_tooltip", {
+            count: BUY_TANKS_STEP,
+            cost: renderNumber(this._tankCost),
+            max: this._maxTanks,
+          })}
+          class="flex items-center gap-1 shrink-0 border rounded-md px-1.5 py-0.5 ${text} font-bold transition-colors ${canBuy
+            ? "border-yellow-400 text-yellow-400 cursor-pointer"
+            : "border-gray-700 text-gray-500 cursor-not-allowed"}"
+        >
+          <img
+            src=${goldCoinIcon}
+            alt=""
+            aria-hidden="true"
+            width="12"
+            height="12"
+          />
+          <span
+            >${translateText("control_panel.buy_tanks", {
+              count: BUY_TANKS_STEP,
+            })}</span
+          >
+        </button>
+      </div>
+    `;
+  }
+
   private calculateTroopBar(): { greenPercent: number; orangePercent: number } {
     const base = Math.max(this._maxTroops, 1);
     const greenPercentRaw = (this._troops / base) * 100;
@@ -578,7 +705,7 @@ export class ControlPanel extends LitElement implements Controller {
         translate="no"
       >
         <div
-          class="flex items-center gap-1 shrink-0 border border-gray-600 rounded-md px-1 py-0.5 text-sm font-bold text-white cursor-pointer w-[8rem]"
+          class="flex items-center gap-1 shrink-0 border border-gray-600 rounded-md px-1 py-0.5 text-sm font-bold text-white cursor-pointer min-w-[8rem]"
         >
           <img
             src=${swordIcon}
@@ -588,12 +715,7 @@ export class ControlPanel extends LitElement implements Controller {
             height="12"
             style="filter: brightness(0) invert(1);"
           />
-          <span
-            >${(this.attackRatio * 100).toFixed(0)}%
-            (${renderTroops(
-              (this.game?.myPlayer()?.troops() ?? 0) * this.attackRatio,
-            )})</span
-          >
+          <span>${this.attackAmountLabel()}</span>
         </div>
         <input
           type="range"
@@ -623,6 +745,7 @@ export class ControlPanel extends LitElement implements Controller {
           <span>${translateText("control_panel.aim_direction_button")}</span>
         </button>
       </div>
+      ${this.renderTankRow(false)}
     `;
   }
 
@@ -707,6 +830,7 @@ export class ControlPanel extends LitElement implements Controller {
           />
         </button>
       </div>
+      ${this.renderTankRow(true)}
     `;
   }
 

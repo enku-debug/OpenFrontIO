@@ -12,4 +12,10 @@ export interface UIState {
    * DirectionAim* events). Toggled by the aim button in ControlPanel.
    */
   directionalAimMode: boolean;
+  /**
+   * Tank mode: attack orders (click, G key, radial menu, Aim arrows) send
+   * tanks instead of troops — the attack ratio of your reserve tanks (see
+   * AttackForce.attackForce). Toggled by the Tanks button in ControlPanel.
+   */
+  tankMode: boolean;
 }

@@ -211,6 +211,8 @@ export interface AttackUpdate {
   troops: number;
   id: string;
   retreating: boolean;
+  // Tank attack: troops then counts tanks. Absent = troops.
+  armored?: boolean;
 }
 
 /**
@@ -252,6 +254,8 @@ export interface PlayerUpdate {
   /** Cumulative gold received from all sources (workers, trade, ...). */
   goldEarned?: Gold;
   troops?: number;
+  /** Tanks in reserve (not counting those out on attacks). */
+  tanks?: number;
   allies?: number[];
   embargoes?: Set<PlayerID>;
   isTraitor?: boolean;

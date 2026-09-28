@@ -2,6 +2,7 @@ import { EventBus } from "../../core/EventBus";
 import { Cell } from "../../core/game/Game";
 import { TileRef } from "../../core/game/GameMap";
 import { AIM_MAX_VIA } from "../../core/Schemas";
+import { attackForce, renderTanks } from "../AttackForce";
 import { Controller } from "../Controller";
 import {
   CloseViewEvent,
@@ -68,6 +69,7 @@ interface Aim {
 interface ActiveAim {
   path: TileRef[];
   display: Pt[];
+  armored: boolean; // tanks (tank mode) or troops
   targetID: string | null; // null = unclaimed land
   targetSmallID: number;
   waves: number;
@@ -139,7 +141,12 @@ export class DirectionAimController implements Controller {
     // menu) replaces the corridor in the simulation, so drop our arrow too.
     this.eventBus.on(SendAttackIntentEvent, (e) => {
       if (this.active === null || e.aimFrom !== null) return;
-      if (e.targetID === this.active.targetID) {
+      // Only an order of the same kind merges into (and replaces) our
+      // attack: tank and troop attacks run side by side.
+      if (
+        e.targetID === this.active.targetID &&
+        e.armored === this.active.armored
+      ) {
         this.clearActive();
       }
     });
@@ -242,24 +249,32 @@ export class DirectionAimController implements Controller {
           this.failPath(screenPath);
           return;
         }
+        const force = attackForce(me, this.uiState);
+        if (force === null) {
+          this.failPath(screenPath);
+          return;
+        }
         const owner = this.game.owner(aim.target);
-        const troops = me.troops() * this.uiState.attackRatio;
         const path = aim.path;
         this.eventBus.emit(
           new SendAttackIntentEvent(
             owner.id(),
-            troops,
+            force.amount,
             path[path.length - 1],
             path[0],
             path.slice(1, -1),
+            force.armored,
           ),
         );
 
         const sameTarget =
-          this.active !== null && this.active.targetSmallID === owner.smallID();
+          this.active !== null &&
+          this.active.targetSmallID === owner.smallID() &&
+          this.active.armored === force.armored;
         this.active = {
           path,
           display: aim.display,
+          armored: force.armored,
           targetID: owner.id(),
           targetSmallID: owner.smallID(),
           waves: sameTarget ? this.active!.waves + 1 : 1,
@@ -267,7 +282,11 @@ export class DirectionAimController implements Controller {
         };
         this.startLoop();
         const end = screenPath[screenPath.length - 1];
-        this.floatText(`+${renderTroops(troops)}`, end.x, end.y);
+        this.floatText(
+          `+${force.armored ? renderTanks(force.amount) : renderTroops(force.amount)}`,
+          end.x,
+          end.y,
+        );
       })
       .catch((error) => {
         console.warn("Failed to check aimed attack actions:", error);
@@ -420,13 +439,19 @@ export class DirectionAimController implements Controller {
 
   // ------------------------------------------------------ the live arrow
 
-  /** Troops in the running aimed attack, or null if it has ended. */
+  /** Troops (or tanks) in the running aimed attack, or null once it ended. */
   private activeAttackTroops(): number | null {
     const me = this.game.myPlayer();
-    if (me === null || this.active === null) return null;
+    const active = this.active;
+    if (me === null || active === null) return null;
     const attack = me
       .outgoingAttacks()
-      .find((a) => a.targetID === this.active!.targetSmallID && !a.retreating);
+      .find(
+        (a) =>
+          a.targetID === active.targetSmallID &&
+          !a.retreating &&
+          (a.armored ?? false) === active.armored,
+      );
     return attack === undefined ? null : attack.troops;
   }
 
@@ -443,7 +468,7 @@ export class DirectionAimController implements Controller {
       const troops = this.activeAttackTroops();
       this.setLabel(
         this.live,
-        `×${this.active.waves}${troops === null ? "" : ` · ${renderTroops(troops)}`}  +`,
+        `×${this.active.waves}${troops === null ? "" : ` · ${this.active.armored ? renderTanks(troops) : renderTroops(troops)}`}  +`,
         pts,
       );
       this.rafId = requestAnimationFrame(frame);
