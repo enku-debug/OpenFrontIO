@@ -85,3 +85,26 @@ Tests use a `setup()` helper from `tests/util/Setup.ts` that creates a full game
 - **Schemas/Validation:** Zod
 - **Testing:** Vitest
 - **Server:** Node.js, Express, ws (WebSocket)
+
+## WW3 (this fork)
+
+This fork (`enku-debug/OpenFrontIO`, branch `ww3`) is **WW3**, the owner's personal mod of OpenFront. Notes for Claude:
+
+- The owner writes in romanized Mongolian. **Always reply in Mongolian (Cyrillic).**
+- **Work fast; skip non-essential steps.** Per change: `npx tsc --noEmit` plus only the tests related to what changed (not the full suite). Test in the browser only for visual changes or when asked. `src/core` changes still get a small test. Keep replies short.
+- Push work to branch **`ww3`**: the owner plays from it.
+- Added on top of OpenFront:
+  - **Aim attacks:** the Aim button plus a freehand line (`DirectionAimController`). `AttackExecution` builds a corridor from `aimFrom` / `aimVia` (up to `AIM_MAX_VIA` = 30 points) and biases toward progress along the path.
+  - **Tanks:**
+    - A Tank Factory structure raises the tank limit by 100 per level. Tanks are bought for gold (`buy_tanks` intent, `BuyTanksExecution`).
+    - Armored attacks use the `armored` flag on `AttackExecution`. Tuning is in Config: `tankPower`, `tankLossFactor`, `tankSlowdown`, `tankDefensePostAdvantage`.
+    - The Tanks toggle is in `ControlPanel`; the build hotkey is V. Nations and bots don't use tanks yet.
+  - **Smooth map edges:** in the terrain, territory and border shaders, toggled by the `mapOverlay.smoothEdges` setting.
+  - **HUD restyle** (`src/client/styles/hud-theme.css`) and the WW3 name and logo.
+- **Playing online:** a GitHub Codespace defined in `.devcontainer/`, auto-started by `.devcontainer/start-ww3.sh`. Port 9000 must be Public.
+  - To update a running codespace, run `git pull`, then restart the dev server:
+    ```
+    pkill -f 'npm run'; pkill -f concurrently; pkill -f 'node_modules/.bin/vite'; pkill -f 'src/server/Server.ts'; bash .devcontainer/start-ww3.sh
+    ```
+  - The game server does not hot-reload, so intent or schema changes need this restart.
+- **Licensing:** keep the "© OpenFront™ and Contributors" notice. Don't redistribute `proprietary/` assets.
