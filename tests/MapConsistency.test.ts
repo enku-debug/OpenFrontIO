@@ -26,6 +26,7 @@ const allMapKeys = Object.keys(GameMapType) as GameMapName[];
 // Maps excluded from the frequency requirement (not part of regular playlists).
 const FREQUENCY_EXEMPTIONS: Set<GameMapName> = new Set([
   "GiantWorldMap",
+  "BigWorld", // WW3: ТОМ World, solo/private lobbies only
   "Oceania",
   "BaikalNukeWars",
   "Tourney1",

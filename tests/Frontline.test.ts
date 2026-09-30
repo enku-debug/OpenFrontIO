@@ -155,7 +155,7 @@ describe("Frontline", () => {
       };
     }
 
-    it("is stronger than a Defense Post, +10% with one", async () => {
+    it("is stronger than a Defense Post, stronger still with one", async () => {
       const { game } = await setupFront();
       const c = game.config();
       const post = c.attackLogic(input(false, true, false));
@@ -164,10 +164,10 @@ describe("Frontline", () => {
       expect(front.attackerTroopLoss).toBeGreaterThan(post.attackerTroopLoss);
       expect(front.tickFraction).toBeGreaterThan(post.tickFraction);
       expect(both.attackerTroopLoss).toBeCloseTo(
-        front.attackerTroopLoss * 1.1,
+        front.attackerTroopLoss * c.frontlineDefensePostBuff(),
         6,
       );
-      expect(both.tickFraction).toBeCloseTo(front.tickFraction * 1.1, 6);
+      expect(both.tickFraction).toBeCloseTo(front.tickFraction * c.frontlineDefensePostBuff(), 6);
     });
 
     it("takes the tanks' lower losses away, keeps their slowdown", async () => {

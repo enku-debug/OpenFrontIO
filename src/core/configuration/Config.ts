@@ -423,7 +423,7 @@ export class Config {
 
   /** Tank attacks lose this share of what troops would (tougher). */
   tankLossFactor(): number {
-    return 0.65;
+    return 0.75;
   }
 
   /** Tank attacks take this many times longer per tile (slower). */
@@ -473,7 +473,7 @@ export class Config {
 
   /** Frontline bonuses are this much stronger where a Defense Post also covers. */
   frontlineDefensePostBuff(): number {
-    return 1.1;
+    return 1.25;
   }
 
   playerTeams(): TeamCountConfig {
@@ -564,7 +564,8 @@ export class Config {
   trainSpawnRate(numPlayerFactories: number, numTrainUnits: number): number {
     // hyperbolic decay, midpoint at 10 factories
     // expected number of trains = numPlayerFactories  / trainSpawnRate(numPlayerFactories)
-    const rate = (numPlayerFactories + 10) * 15;
+    // WW3: 12 (OpenFront: 15) — factories send trains 25% more often.
+    const rate = (numPlayerFactories + 10) * 12;
     return Math.max(1, Math.floor(rate / this.trainSaturation(numTrainUnits)));
   }
 

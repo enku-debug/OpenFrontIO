@@ -150,6 +150,8 @@ export const DERIVED_FIELDS = new Set<string>([
   "myUnitCountMemo",
   "myUnitsOwnedMemo",
   "nearbyMemo",
+  "_landlockedAt", // isLandlocked() cache, keyed by tile-change version
+  "_landlocked",
   // SharedWaterCache
   "playerWater",
   // Config
