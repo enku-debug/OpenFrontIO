@@ -458,7 +458,7 @@ export class Config {
 
   /** Nodes must sit within this many tiles of your border. */
   frontlineBorderDistance(): number {
-    return 3;
+    return 9;
   }
 
   /** Attacker troop loss multiplier on covered tiles (Defense Post: 5). */
