@@ -41,6 +41,7 @@ function ps(overrides: Partial<PlayerState> = {}): PlayerState {
     goldEarned: 0,
     troops: 0,
     tanks: 0,
+    landlocked: false,
     isTraitor: false,
     traitorRemainingTicks: 0,
     inDoomsdayClock: false,

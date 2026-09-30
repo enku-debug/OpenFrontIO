@@ -535,6 +535,7 @@
     "army_limit_warning": "You're near your army limit! Consider sending troops to teammates.",
     "buy_tanks": "+{count}",
     "buy_tanks_tooltip": "Buy up to {count} tanks at {cost} gold each. Your Tank Factories allow {max} tanks in total.",
+    "landlocked_tooltip": "Landlocked: none of your land touches the ocean, so your trains earn ×{bonus} gold.",
     "low_troops_warning": "You are very low on troops - You should always keep some troops for defense.",
     "tank_mode_button": "Tanks",
     "tank_mode_tooltip": "Tank mode: clicks, the G key and Aim arrows send tanks instead of troops (attack % of your tanks). Tanks are slower but tougher, and 1.5x as strong against Defense Posts.",

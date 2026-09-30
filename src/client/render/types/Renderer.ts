@@ -79,6 +79,8 @@ export interface PlayerState {
   troops: number;
   /** Tanks in reserve (not counting those out on attacks). */
   tanks: number;
+  /** No owned tile touches the ocean (train gold bonus). */
+  landlocked: boolean;
   isTraitor: boolean;
   traitorRemainingTicks: number;
   inDoomsdayClock: boolean;

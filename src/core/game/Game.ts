@@ -684,6 +684,9 @@ export interface Player {
   addTanks(tanks: number): void;
   // Removes up to `tanks` (floored); returns how many were removed.
   removeTanks(tanks: number): number;
+  // No owned tile touches the ocean (lakes don't count): train gold is
+  // multiplied by Config.landlockedTrainGoldBonus.
+  isLandlocked(): boolean;
 
   // Units
   // Fixed-arity + array overloads instead of a rest parameter: the rest array

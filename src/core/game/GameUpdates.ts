@@ -256,6 +256,8 @@ export interface PlayerUpdate {
   troops?: number;
   /** Tanks in reserve (not counting those out on attacks). */
   tanks?: number;
+  /** No owned tile touches the ocean (train gold bonus). */
+  landlocked?: boolean;
   allies?: number[];
   embargoes?: Set<PlayerID>;
   isTraitor?: boolean;

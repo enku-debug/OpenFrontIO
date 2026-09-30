@@ -403,6 +403,7 @@ export class PlayerImpl implements Player {
       goldEarned: this._goldEarned,
       troops: this.troops(),
       tanks: this._tanks,
+      landlocked: this.isLandlocked(),
       allies: allies,
       embargoes: embargoes,
       isTraitor: this.isTraitor(),
@@ -1390,6 +1391,26 @@ export class PlayerImpl implements Player {
 
   tanks(): number {
     return this._tanks;
+  }
+
+  // Derived from tiles, so cached per tile-change version (not snapshotted).
+  private _landlockedAt = -1;
+  private _landlocked = false;
+
+  isLandlocked(): boolean {
+    if (this._landlockedAt !== this._tileChangeVersion) {
+      this._landlockedAt = this._tileChangeVersion;
+      let touchesOcean = false;
+      // Ocean is never owned, so only border tiles can touch it.
+      for (const t of this._borderTiles) {
+        if (this.mg.isOceanShore(t)) {
+          touchesOcean = true;
+          break;
+        }
+      }
+      this._landlocked = !touchesOcean && this.numTilesOwned() > 0;
+    }
+    return this._landlocked;
   }
 
   addTanks(tanks: number): void {

@@ -6,7 +6,7 @@ import type {
   SnapshotWriter,
 } from "../snapshot/SnapshotContext";
 import { snapshotType, zInt, zRef } from "../snapshot/SnapshotType";
-import { Game, Player, Unit, UnitType } from "./Game";
+import { Game, Gold, Player, Unit, UnitType } from "./Game";
 import { TileRef } from "./GameMap";
 import { GameUpdateType } from "./GameUpdates";
 import { Railroad } from "./Railroad";
@@ -14,6 +14,17 @@ import { Railroad } from "./Railroad";
 /**
  * Handle train stops at various station types
  */
+/** Train gold for `player`, ×Config.landlockedTrainGoldBonus if landlocked. */
+export function landlockedTrainGold(
+  mg: Game,
+  player: Player,
+  gold: Gold,
+): Gold {
+  if (!player.isLandlocked()) return gold;
+  const pct = BigInt(Math.round(mg.config().landlockedTrainGoldBonus() * 100));
+  return (gold * pct) / 100n;
+}
+
 interface TrainStopHandler {
   onStop(mg: Game, station: TrainStation, trainExecution: TrainExecution): void;
 }
@@ -35,13 +46,15 @@ class TradeStationStopHandler implements TrainStopHandler {
       );
     // Share revenue with the station owner if it's not the current player
     if (trainOwner !== stationOwner) {
-      stationOwner.addGold(gold, station.tile());
-      stationOwner.addTrainGold(gold);
-      mg.stats().trainExternalTrade(stationOwner, gold);
+      const g = landlockedTrainGold(mg, stationOwner, gold);
+      stationOwner.addGold(g, station.tile());
+      stationOwner.addTrainGold(g);
+      mg.stats().trainExternalTrade(stationOwner, g);
     }
-    trainOwner.addGold(gold, station.tile());
-    trainOwner.addTrainGold(gold);
-    mg.stats().trainSelfTrade(trainOwner, gold);
+    const g = landlockedTrainGold(mg, trainOwner, gold);
+    trainOwner.addGold(g, station.tile());
+    trainOwner.addTrainGold(g);
+    mg.stats().trainSelfTrade(trainOwner, g);
   }
 }
 

@@ -52,6 +52,7 @@ export function diffPlayerUpdate(
     prev.trainGold === next.trainGold &&
     prev.piracyGold === next.piracyGold &&
     prev.tanks === next.tanks &&
+    prev.landlocked === next.landlocked &&
     prev.isTraitor === next.isTraitor &&
     prev.traitorRemainingTicks === next.traitorRemainingTicks &&
     prev.inDoomsdayClock === next.inDoomsdayClock &&
@@ -106,6 +107,7 @@ export function diffPlayerUpdate(
   setIfDifferent("trainGold", prev.trainGold === next.trainGold);
   setIfDifferent("piracyGold", prev.piracyGold === next.piracyGold);
   setIfDifferent("tanks", prev.tanks === next.tanks);
+  setIfDifferent("landlocked", prev.landlocked === next.landlocked);
   // tilesOwned / gold / troops / goldEarned intentionally absent — see
   // EXCEPTION above (goldEarned churns every tick via worker income).
   setIfDifferent("isTraitor", prev.isTraitor === next.isTraitor);
@@ -186,6 +188,7 @@ export function applyStateUpdate(target: PlayerState, pu: PlayerUpdate): void {
   if (pu.goldEarned !== undefined) target.goldEarned = Number(pu.goldEarned);
   if (pu.troops !== undefined) target.troops = pu.troops;
   if (pu.tanks !== undefined) target.tanks = pu.tanks;
+  if (pu.landlocked !== undefined) target.landlocked = pu.landlocked;
   if (pu.isTraitor !== undefined) target.isTraitor = pu.isTraitor;
   if (pu.traitorRemainingTicks !== undefined) {
     target.traitorRemainingTicks = Math.max(0, pu.traitorRemainingTicks);

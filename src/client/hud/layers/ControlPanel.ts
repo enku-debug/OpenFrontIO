@@ -75,6 +75,9 @@ export class ControlPanel extends LitElement implements Controller {
 
   @state()
   private _gold: Gold;
+  // Landlocked (no ocean coast): train gold bonus, shown by the gold count.
+  private _landlocked = false;
+  private _landlockedBonus = 1;
 
   @state()
   private _attackingTroops: number = 0;
@@ -162,6 +165,8 @@ export class ControlPanel extends LitElement implements Controller {
     const config = this.game.config();
     this._maxTroops = config.maxTroops(player);
     this._gold = player.gold();
+    this._landlocked = player.isLandlocked();
+    this._landlockedBonus = config.landlockedTrainGoldBonus();
     this._troops = player.troops();
     this._attackingTroops = player
       .outgoingAttacks()
@@ -695,6 +700,7 @@ export class ControlPanel extends LitElement implements Controller {
             : ""}
           <img src=${goldCoinIcon} width="13" height="13" class="shrink-0" />
           <span class="tabular-nums">${renderNumber(this._gold)}</span>
+          ${this.renderLandlockedBadge()}
         </div>
       </div>
       <!-- Row 2: attack ratio | slider -->
@@ -749,6 +755,18 @@ export class ControlPanel extends LitElement implements Controller {
     `;
   }
 
+  /** "🚆×1.5" next to the gold while landlocked (train gold bonus). */
+  private renderLandlockedBadge() {
+    if (!this._landlocked) return "";
+    return html`<span
+      class="text-[10px] font-bold text-emerald-300 whitespace-nowrap"
+      title=${translateText("control_panel.landlocked_tooltip", {
+        bonus: this._landlockedBonus,
+      })}
+      >🚆×${this._landlockedBonus}</span
+    >`;
+  }
+
   private renderMobile() {
     return html`
       ${this.renderNotification()}
@@ -771,6 +789,7 @@ export class ControlPanel extends LitElement implements Controller {
             : ""}
           <img src=${goldCoinIcon} width="13" height="13" />
           <span class="px-0.5">${renderNumber(this._gold)}</span>
+          ${this.renderLandlockedBadge()}
         </div>
         <!-- Troop bar -->
         <div

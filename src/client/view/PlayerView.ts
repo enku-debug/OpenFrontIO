@@ -88,6 +88,7 @@ function stateFromUpdate(pu: PlayerUpdate): PlayerState {
     goldEarned: Number(pu.goldEarned ?? 0n),
     troops: pu.troops!,
     tanks: pu.tanks ?? 0,
+    landlocked: pu.landlocked ?? false,
     isTraitor: pu.isTraitor!,
     traitorRemainingTicks: Math.max(0, pu.traitorRemainingTicks ?? 0),
     inDoomsdayClock: pu.inDoomsdayClock ?? false,
@@ -561,6 +562,11 @@ export class PlayerView {
 
   troops(): number {
     return this.state.troops;
+  }
+
+  /** No owned tile touches the ocean: train gold ×Config.landlockedTrainGoldBonus. */
+  isLandlocked(): boolean {
+    return this.state.landlocked;
   }
 
   /** Tanks in reserve, ready to send (tanks out on attacks not included). */

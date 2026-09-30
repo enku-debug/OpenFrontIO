@@ -593,6 +593,11 @@ export class Config {
     return toInt(gold * this.goldMultiplierFor(player));
   }
 
+  /** Train gold multiplier for players with no ocean coast (Player.isLandlocked). */
+  landlockedTrainGoldBonus(): number {
+    return 1.5;
+  }
+
   trainStationMinRange(): number {
     return 15;
   }
