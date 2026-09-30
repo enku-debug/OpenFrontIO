@@ -23,6 +23,7 @@ export enum GameMapType {
   BeringSea = "Bering Sea", // map-generator/assets/maps/beringsea/info.json
   BeringStrait = "Bering Strait", // map-generator/assets/maps/beringstrait/info.json
   BetweenTwoSeas = "Between Two Seas", // map-generator/assets/maps/betweentwoseas/info.json
+  BigWorld = "ТОМ World", // map-generator/assets/maps/bigworld/info.json
   BlackSea = "Black Sea", // map-generator/assets/maps/blacksea/info.json
   BosphorusStraits = "Bosphorus Straits", // map-generator/assets/maps/bosphorusstraits/info.json
   BranchingPaths = "Branching Paths", // map-generator/assets/maps/branchingpaths/info.json
@@ -491,6 +492,18 @@ export const maps: readonly MapInfo[] = [
     specialFrequency: -1,
     defaultNationCount: 15,
     themes: ["europe", "asia"],
+  },
+  {
+    id: "BigWorld",
+    type: GameMapType.BigWorld,
+    translationKey: "map.bigworld",
+    categories: ["world"],
+    multiplayerFrequency: 0,
+    ffaFrequency: -1,
+    teamFrequency: -1,
+    specialFrequency: -1,
+    defaultNationCount: 72,
+    forcedModifiers: ["isCrowded:50"],
   },
   {
     id: "BlackSea",
