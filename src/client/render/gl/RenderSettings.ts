@@ -155,6 +155,8 @@ export interface RenderSettings {
     highlightFillBrighten: number;
     highlightThicken: number;
     defensePostRange: number;
+    /** Coverage radius of each Frontline node (Config.frontlineRange). */
+    frontlineRange: number;
     embargoTintRatio: number;
     friendlyTintRatio: number;
     embargoTintR: number;

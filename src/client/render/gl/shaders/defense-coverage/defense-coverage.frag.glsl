@@ -14,6 +14,7 @@ uniform float uRange;
 
 flat in vec2 vPostCenter;
 flat in float vOwner;
+flat in float vRange;
 
 out vec4 fragColor;
 
@@ -24,7 +25,7 @@ void main() {
   // Circle test in tile-integer space (matches the old per-fragment loop).
   float dx = float(tc.x) - vPostCenter.x;
   float dy = float(tc.y) - vPostCenter.y;
-  if (dx * dx + dy * dy > uRange * uRange) discard;
+  if (dx * dx + dy * dy > vRange * vRange) discard;
 
   // Same-owner test: only the tile's own owner's posts defend it.
   uint owner = texelFetch(uTileTex, tc, 0).r & uint(OWNER_MASK);

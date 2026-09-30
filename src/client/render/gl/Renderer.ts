@@ -959,14 +959,20 @@ export class GPURenderer {
     this.structureLevelPass.updateStructures(units);
     this.samRadiusPass.updateStructures(units);
     this.unitPass.setStructures(units);
-    const posts: { x: number; y: number; ownerID: number }[] = [];
+    const posts: { x: number; y: number; ownerID: number; range?: number }[] =
+      [];
     const w = this.mapW;
     for (const u of units.values()) {
-      if (u.unitType === "Defense Post" && !u.underConstruction) {
+      if (u.underConstruction) continue;
+      if (u.unitType === "Defense Post" || u.unitType === "Frontline") {
         posts.push({
           x: u.pos % w,
           y: (u.pos - (u.pos % w)) / w,
           ownerID: u.ownerID,
+          range:
+            u.unitType === "Frontline"
+              ? this.settings.mapOverlay.frontlineRange
+              : undefined,
         });
       }
     }

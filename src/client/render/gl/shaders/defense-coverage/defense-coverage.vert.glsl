@@ -6,22 +6,25 @@ precision highp float;
 // filters by tile owner. See DefenseCoveragePass.
 
 layout(location = 0) in vec2 aCorner;  // unit quad corner, [0,1]²
-layout(location = 1) in vec3 aPost;     // (tileX, tileY, ownerID)
+layout(location = 1) in vec4 aPost;     // (tileX, tileY, ownerID, range; 0 = uRange)
 
 uniform vec2 uMapSize;
 uniform float uRange;
 
 flat out vec2 vPostCenter;
 flat out float vOwner;
+flat out float vRange;
 
 void main() {
   vPostCenter = aPost.xy;
   vOwner = aPost.z;
+  float range = aPost.w > 0.0 ? aPost.w : uRange;
+  vRange = range;
 
   // Box spanning [center - range, center + range] in tile coords, plus a
   // 1-tile margin so the boundary tiles at exactly `range` are rasterized
   // (their pixel centers sit just past the un-padded edge).
-  vec2 tilePos = aPost.xy + (aCorner * 2.0 - 1.0) * (uRange + 1.0);
+  vec2 tilePos = aPost.xy + (aCorner * 2.0 - 1.0) * (range + 1.0);
 
   // Tile-resolution FBO (viewport = map size), so map straight to clip space.
   vec2 ndc = (tilePos / uMapSize) * 2.0 - 1.0;
