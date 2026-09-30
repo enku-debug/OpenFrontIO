@@ -3,12 +3,14 @@
   "name": "ТОМ World",
   "translation_key": "map.bigworld",
   "categories": [
+    "featured",
     "world"
   ],
   "multiplayer_frequency": 0,
   "forced_modifiers": [
     "isCrowded:50"
   ],
+  "featured_rank": 2,
   "nations": [
     {
       "coordinates": [

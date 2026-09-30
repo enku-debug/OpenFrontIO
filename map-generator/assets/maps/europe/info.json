@@ -4,7 +4,7 @@
   "translation_key": "map.europe",
   "categories": ["featured", "continental", "europe"],
   "multiplayer_frequency": 7,
-  "featured_rank": 2,
+  "featured_rank": 3,
   "nations": [
     {
       "coordinates": [634, 781],

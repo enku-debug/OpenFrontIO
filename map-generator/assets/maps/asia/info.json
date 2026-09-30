@@ -4,7 +4,7 @@
   "translation_key": "map.asia",
   "categories": ["featured", "continental", "asia"],
   "multiplayer_frequency": 6,
-  "featured_rank": 5,
+  "featured_rank": 6,
   "nations": [
     {
       "coordinates": [165, 422],

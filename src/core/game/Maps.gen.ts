@@ -278,7 +278,7 @@ export const maps: readonly MapInfo[] = [
     teamFrequency: -1,
     specialFrequency: -1,
     defaultNationCount: 44,
-    featuredRank: 6,
+    featuredRank: 7,
     themes: ["africa"],
   },
   {
@@ -352,7 +352,7 @@ export const maps: readonly MapInfo[] = [
     teamFrequency: -1,
     specialFrequency: -1,
     defaultNationCount: 25,
-    featuredRank: 5,
+    featuredRank: 6,
     themes: ["asia"],
   },
   {
@@ -497,12 +497,13 @@ export const maps: readonly MapInfo[] = [
     id: "BigWorld",
     type: GameMapType.BigWorld,
     translationKey: "map.bigworld",
-    categories: ["world"],
+    categories: ["featured", "world"],
     multiplayerFrequency: 0,
     ffaFrequency: -1,
     teamFrequency: -1,
     specialFrequency: -1,
     defaultNationCount: 72,
+    featuredRank: 2,
     forcedModifiers: ["isCrowded:50"],
   },
   {
@@ -894,7 +895,7 @@ export const maps: readonly MapInfo[] = [
     teamFrequency: -1,
     specialFrequency: -1,
     defaultNationCount: 52,
-    featuredRank: 2,
+    featuredRank: 3,
     themes: ["europe"],
   },
   {
@@ -1988,7 +1989,7 @@ export const maps: readonly MapInfo[] = [
     teamFrequency: -1,
     specialFrequency: -1,
     defaultNationCount: 71,
-    featuredRank: 3,
+    featuredRank: 4,
     themes: ["north_america"],
   },
   {
@@ -2216,7 +2217,7 @@ export const maps: readonly MapInfo[] = [
     teamFrequency: -1,
     specialFrequency: -1,
     defaultNationCount: 25,
-    featuredRank: 4,
+    featuredRank: 5,
     themes: ["south_america"],
   },
   {

@@ -1,5 +1,6 @@
 {
-  "categories": ["world"],
+  "categories": ["featured", "world"],
+  "featured_rank": 2,
   "forced_modifiers": ["isCrowded:50"],
   "id": "BigWorld",
   "map": {
