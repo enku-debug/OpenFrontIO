@@ -59,7 +59,7 @@ export class PlayPage extends LitElement {
               class="col-start-2 flex items-center justify-center text-malibu-blue min-w-0"
             >
               <img
-                src=${assetUrl("images/WW3Logo.svg")}
+                src=${assetUrl("images/WW3Logo.png")}
                 alt="WW3"
                 class="h-full w-auto"
               />
