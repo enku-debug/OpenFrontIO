@@ -38,6 +38,7 @@ const portIcon = assetUrl("images/PortIcon.svg");
 const samlauncherIcon = assetUrl("images/SamLauncherIconWhite.svg");
 const shieldIcon = assetUrl("images/ShieldIconWhite.svg");
 const tankFactoryIcon = assetUrl("images/TankFactoryIconWhite.svg");
+const frontlineIcon = assetUrl("images/FrontlineIconWhite.svg");
 
 export interface BuildItemDisplay {
   unitType: PlayerBuildableUnitType;
@@ -124,6 +125,13 @@ export const buildTable: BuildItemDisplay[][] = [
       icon: tankFactoryIcon,
       description: "build_menu.desc.tank_factory",
       key: "unit_type.tank_factory",
+      countable: true,
+    },
+    {
+      unitType: UnitType.Frontline,
+      icon: frontlineIcon,
+      description: "build_menu.desc.frontline",
+      key: "unit_type.frontline",
       countable: true,
     },
   ],

@@ -106,6 +106,11 @@ export class SendAttackIntentEvent implements GameEvent {
   ) {}
 }
 
+// Build a Frontline along a drawn line (tiles along it, in order).
+export class SendBuildFrontlineIntentEvent implements GameEvent {
+  constructor(public readonly path: TileRef[]) {}
+}
+
 export class SendBuyTanksIntentEvent implements GameEvent {
   constructor(public readonly count: number) {}
 }
@@ -316,6 +321,9 @@ export class Transport {
     );
     this.subscribe(SendSpawnIntentEvent, (e) => this.onSendSpawnIntentEvent(e));
     this.subscribe(SendAttackIntentEvent, (e) => this.onSendAttackIntent(e));
+    this.subscribe(SendBuildFrontlineIntentEvent, (e) =>
+      this.sendIntent({ type: "build_frontline", path: e.path }),
+    );
     this.subscribe(SendBuyTanksIntentEvent, (e) =>
       this.sendIntent({ type: "buy_tanks", count: Math.floor(e.count) }),
     );
@@ -894,6 +902,9 @@ export class Transport {
   }
 
   private onBuildUnitIntent(event: BuildUnitIntentEvent) {
+    // Frontlines are drawn, not placed: the build menus' Frontline entry
+    // switches to drawing instead (FrontlineController).
+    if (event.unit === UnitType.Frontline) return;
     this.sendIntent({
       type: "build_unit",
       unit: event.unit,

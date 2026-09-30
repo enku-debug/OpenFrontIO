@@ -157,6 +157,30 @@ export class DirectionAimCompleteEvent implements GameEvent {
   ) {}
 }
 
+/**
+ * Frontline drawing (uiState.ghostStructure === UnitType.Frontline): a
+ * single-pointer drag on the map draws the line instead of panning. See
+ * FrontlineController.
+ */
+export class FrontlineDrawUpdateEvent implements GameEvent {
+  constructor(
+    public readonly startX: number,
+    public readonly startY: number,
+    public readonly endX: number,
+    public readonly endY: number,
+  ) {}
+}
+
+/** Emitted when the player releases after drawing a Frontline */
+export class FrontlineDrawCompleteEvent implements GameEvent {
+  constructor(
+    public readonly startX: number,
+    public readonly startY: number,
+    public readonly endX: number,
+    public readonly endY: number,
+  ) {}
+}
+
 /** Emitted when an aim drag is released without moving past the drag threshold */
 export class DirectionAimCancelEvent implements GameEvent {}
 
@@ -481,6 +505,7 @@ export class InputHandler {
       "buildWarship",
       "buildMIRV",
       "buildTankFactory",
+      "buildFrontline",
     ];
     buildKeybinds = buildKeybinds.map((i: string): string => {
       return this.keybinds[i];
@@ -966,6 +991,25 @@ export class InputHandler {
       }
     }
 
+    // Finish drawing a Frontline. A plain click falls through (and does
+    // nothing while building: see MouseUpEvent handling).
+    if (this.uiState.ghostStructure === UnitType.Frontline) {
+      const drawDist =
+        Math.abs(event.clientX - this.lastPointerDownX) +
+        Math.abs(event.clientY - this.lastPointerDownY);
+      if (drawDist >= this.DRAG_THRESHOLD_PX) {
+        this.eventBus.emit(
+          new FrontlineDrawCompleteEvent(
+            this.lastPointerDownX,
+            this.lastPointerDownY,
+            event.clientX,
+            event.clientY,
+          ),
+        );
+        return;
+      }
+    }
+
     // Complete a directional-aim drag if aim mode is active. A real drag
     // (past the threshold) fires the aimed attack and swallows the tap; a
     // plain click without dragging falls through to the normal click/radial
@@ -1139,6 +1183,16 @@ export class InputHandler {
             event.clientY,
           ),
         );
+      } else if (this.uiState.ghostStructure === UnitType.Frontline) {
+        // Drawing a Frontline owns single-pointer drags.
+        this.eventBus.emit(
+          new FrontlineDrawUpdateEvent(
+            this.lastPointerDownX,
+            this.lastPointerDownY,
+            event.clientX,
+            event.clientY,
+          ),
+        );
       } else if (this.uiState.directionalAimMode) {
         // Aim mode owns single-pointer drags: draw the aim arrow instead of
         // panning the camera. Resolved on release in onPointerUp.
@@ -1300,6 +1354,7 @@ export class InputHandler {
       { key: "buildWarship", type: UnitType.Warship },
       { key: "buildMIRV", type: UnitType.MIRV },
       { key: "buildTankFactory", type: UnitType.TankFactory },
+      { key: "buildFrontline", type: UnitType.Frontline },
     ];
     for (const { key, type } of buildKeybinds) {
       if (this.keybindMatchesEvent({ code, shiftKey }, this.keybinds[key]))

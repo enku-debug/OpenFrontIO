@@ -103,6 +103,8 @@ export interface AttackLogicInput {
   } | null;
   /** A defense post owned by the defender is in range of the tile. */
   defenderHasDefensePost: boolean;
+  /** A Frontline owned by the defender covers the tile. */
+  defenderHasFrontline?: boolean;
   /** Fraction of land tiles with fallout, or null if the tile has no fallout. */
   falloutRatio: number | null;
   /** Tiles on the attack front this tick (plus jitter); fixed for the tick. */
@@ -434,6 +436,46 @@ export class Config {
     return 1.5;
   }
 
+  // ---- Frontline: a defense line drawn along your border ----
+  // Built as a chain of nodes (UnitType.Frontline) along the drawn line;
+  // each node covers frontlineRange() around it, so together they cover a
+  // band along the line rather than a circle.
+
+  /** Coverage radius of each node; the band is about twice this wide. */
+  frontlineRange(): number {
+    return 15;
+  }
+
+  /** Tiles between nodes along the drawn line. */
+  frontlineNodeSpacing(): number {
+    return 5;
+  }
+
+  /** Longest line one drawing can build, in tiles. */
+  frontlineMaxLength(): number {
+    return 40;
+  }
+
+  /** Nodes must sit within this many tiles of your border. */
+  frontlineBorderDistance(): number {
+    return 3;
+  }
+
+  /** Attacker troop loss multiplier on covered tiles (Defense Post: 5). */
+  frontlineDefenseBonus(): number {
+    return 6;
+  }
+
+  /** Attack slowdown on covered tiles (Defense Post: 3). */
+  frontlineSpeedBonus(): number {
+    return 3.5;
+  }
+
+  /** Frontline bonuses are this much stronger where a Defense Post also covers. */
+  frontlineDefensePostBuff(): number {
+    return 1.1;
+  }
+
   playerTeams(): TeamCountConfig {
     return this._gameConfig.playerTeams ?? 0;
   }
@@ -747,6 +789,13 @@ export class Config {
           upgradable: true,
         };
         break;
+      case UnitType.Frontline:
+        // Per node: 5K gold per tile of line (frontlineNodeSpacing() tiles).
+        info = {
+          cost: this.costWrapper(() => 25_000, UnitType.Frontline),
+          constructionDuration: this.instantBuild() ? 0 : 8 * 10,
+        };
+        break;
       case UnitType.Train:
         info = {
           cost: () => 0n,
@@ -941,9 +990,12 @@ export class Config {
   attackLogic(input: AttackLogicInput): AttackLogicResult {
     const result = this.baseAttackLogic(input);
     if (input.armored !== true) return result;
-    // Tanks: slower, but lose fewer units per tile.
+    // Tanks: slower, but lose fewer units per tile — except against a
+    // Frontline, which takes that advantage away (the slowdown stays).
+    const frontline = input.defender !== null && input.defenderHasFrontline;
     return {
-      attackerTroopLoss: result.attackerTroopLoss * this.tankLossFactor(),
+      attackerTroopLoss:
+        result.attackerTroopLoss * (frontline ? 1 : this.tankLossFactor()),
       defenderTroopLoss: result.defenderTroopLoss,
       tickFraction: result.tickFraction * this.tankSlowdown(),
     };
@@ -953,7 +1005,15 @@ export class Config {
     const { attackTroops, attacker, defender } = input;
     let { mag, tileCost } = terrainAttackBase(input.terrain);
 
-    if (defender !== null && input.defenderHasDefensePost) {
+    if (defender !== null && input.defenderHasFrontline === true) {
+      // Frontline: stronger than a Defense Post, full strength against
+      // tanks, and a bit stronger still where a Defense Post also covers.
+      const buff = input.defenderHasDefensePost
+        ? this.frontlineDefensePostBuff()
+        : 1;
+      mag *= this.frontlineDefenseBonus() * buff;
+      tileCost *= this.frontlineSpeedBonus() * buff;
+    } else if (defender !== null && input.defenderHasDefensePost) {
       // Tanks break through defense lines: the post's loss and speed
       // bonuses count tankDefensePostAdvantage() times less against them.
       const vsTanks =

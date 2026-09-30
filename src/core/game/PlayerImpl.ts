@@ -30,6 +30,7 @@ import {
   within,
 } from "../Util";
 import { AttackImpl } from "./AttackImpl";
+import { isFrontlineNodeTile } from "./Frontline";
 import {
   Alliance,
   AllianceInfo,
@@ -1642,6 +1643,8 @@ export class PlayerImpl implements Player {
       case UnitType.Factory:
       case UnitType.TankFactory:
         return this.landBasedStructureSpawn(targetTile, validTiles);
+      case UnitType.Frontline:
+        return this.frontlineNodeSpawn(targetTile);
       default:
         assertNever(unitType);
     }
@@ -1756,6 +1759,22 @@ export class PlayerImpl implements Player {
     return tiles[0];
   }
 
+  /**
+   * A Frontline node goes exactly on `tile`: your own land within
+   * frontlineBorderDistance() of land you don't own. Nodes don't keep other
+   * structures away (see validStructureSpawnTiles).
+   */
+  frontlineNodeSpawn(tile: TileRef): TileRef | false {
+    return isFrontlineNodeTile(
+      this.mg.map(),
+      this.smallID(),
+      tile,
+      this.mg.config().frontlineBorderDistance(),
+    )
+      ? tile
+      : false;
+  }
+
   private validStructureSpawnTiles(tile: TileRef): TileRef[] {
     if (this.mg.owner(tile) !== this) {
       return [];
@@ -1814,6 +1833,7 @@ export class PlayerImpl implements Player {
     for (const t of nearbyTiles) {
       let blocked = false;
       for (const { unit } of nearbyUnits) {
+        if (unit.type() === UnitType.Frontline) continue;
         if (this.mg.euclideanDistSquared(unit.tile(), t) < minDistSquared) {
           blocked = true;
           break;

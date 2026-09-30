@@ -5,6 +5,7 @@ import { AmbienceController } from "../controllers/AmbienceController";
 import { AttackingTroopsController } from "../controllers/AttackingTroopsController";
 import { BuildPreviewController } from "../controllers/BuildPreviewController";
 import { DirectionAimController } from "../controllers/DirectionAimController";
+import { FrontlineController } from "../controllers/FrontlineController";
 import { HoverHighlightController } from "../controllers/HoverHighlightController";
 import { LiveStatsController } from "../controllers/LiveStatsController";
 import { MapLayerController } from "../controllers/MapLayerController";
@@ -319,6 +320,7 @@ export function createRenderer(
   const layers: Controller[] = [
     new WarshipSelectionController(game, eventBus, transformHandler, view),
     new DirectionAimController(game, eventBus, transformHandler, uiState),
+    new FrontlineController(game, eventBus, transformHandler, uiState),
     new BuildPreviewController(
       game,
       eventBus,

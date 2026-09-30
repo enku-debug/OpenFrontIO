@@ -17,6 +17,7 @@ import { EmbargoAllExecutionSnapshot } from "../execution/EmbargoAllExecution";
 import { EmbargoExecutionSnapshot } from "../execution/EmbargoExecution";
 import { EmojiExecutionSnapshot } from "../execution/EmojiExecution";
 import { FactoryExecutionSnapshot } from "../execution/FactoryExecution";
+import { FrontlineExecutionSnapshot } from "../execution/FrontlineExecution";
 import { MarkDisconnectedExecutionSnapshot } from "../execution/MarkDisconnectedExecution";
 import { MirvExecutionSnapshot } from "../execution/MIRVExecution";
 import { MissileSiloExecutionSnapshot } from "../execution/MissileSiloExecution";
@@ -64,6 +65,7 @@ export const EXECUTION_SNAPSHOT_TYPES = [
   CityExecutionSnapshot,
   ConstructionExecutionSnapshot,
   DefensePostExecutionSnapshot,
+  FrontlineExecutionSnapshot,
   DeleteUnitExecutionSnapshot,
   DonateGoldExecutionSnapshot,
   DonateTroopsExecutionSnapshot,

@@ -176,6 +176,7 @@
       "missile_silo": "Used to launch nukes",
       "port": "Sends trade ships to generate gold",
       "sam_launcher": "Defends against incoming nukes",
+      "frontline": "Draw a defense line along your border. Stronger than a Defense Post, even stronger next to one, and cancels the tanks' lower losses",
       "tank_factory": "Lets you buy tanks: +100 tank limit per level",
       "warship": "Captures trade ships, destroys ships and boats"
     },
@@ -2182,6 +2183,7 @@
     "port": "Port",
     "sam_launcher": "SAM Launcher",
     "tank_factory": "Tank Factory",
+    "frontline": "Frontline",
     "warship": "Warship"
   },
   "update_available": {
@@ -2255,6 +2257,8 @@
     "build_sam_launcher_desc": "Build a SAM Launcher under your cursor.",
     "build_tank_factory": "Build Tank Factory",
     "build_tank_factory_desc": "Build a Tank Factory under your cursor.",
+    "build_frontline": "Build Frontline",
+    "build_frontline_desc": "Draw a Frontline: drag along your border.",
     "build_warship": "Build Warship",
     "build_warship_desc": "Build a Warship under your cursor.",
     "camera_movement": "Camera Movement",

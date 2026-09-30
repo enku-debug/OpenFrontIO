@@ -16,6 +16,7 @@ import { DonateTroopsExecution } from "./DonateTroopExecution";
 import { EmbargoAllExecution } from "./EmbargoAllExecution";
 import { EmbargoExecution } from "./EmbargoExecution";
 import { EmojiExecution } from "./EmojiExecution";
+import { FrontlineExecution } from "./FrontlineExecution";
 import { MarkDisconnectedExecution } from "./MarkDisconnectedExecution";
 import { MoveWarshipExecution } from "./MoveWarshipExecution";
 import { NationExecution } from "./NationExecution";
@@ -77,6 +78,8 @@ export class Executor {
       }
       case "buy_tanks":
         return new BuyTanksExecution(player, intent.count);
+      case "build_frontline":
+        return new FrontlineExecution(player, intent.path);
       case "cancel_attack":
         return new RetreatExecution(player, intent.attackID);
       case "cancel_boat":

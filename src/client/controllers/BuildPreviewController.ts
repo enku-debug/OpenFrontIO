@@ -188,7 +188,11 @@ export class BuildPreviewController implements Controller {
    * UI bits (build menu, key bindings) toggle uiState; we mirror it here.
    */
   private syncGhostState(): void {
-    const target = this.uiState.ghostStructure;
+    // Frontlines are drawn (FrontlineController), so no placement ghost.
+    const target =
+      this.uiState.ghostStructure === UnitType.Frontline
+        ? null
+        : this.uiState.ghostStructure;
     if (this.ghostUnit) {
       if (target === null) {
         this.removeGhostStructure();
@@ -514,6 +518,7 @@ export class BuildPreviewController implements Controller {
   }
 
   private requestConfirmStructure(e: MouseUpEvent): void {
+    if (this.uiState.ghostStructure === UnitType.Frontline) return;
     if (!this.ghostUnit && !this.uiState.ghostStructure) return;
     if (this.isGhostReadyForConfirm()) {
       this.createStructure(e);

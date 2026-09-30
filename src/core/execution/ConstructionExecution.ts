@@ -45,6 +45,12 @@ export class ConstructionExecution implements Execution {
       return;
     }
 
+    // Frontlines are drawn, not placed: see FrontlineExecution.
+    if (this.constructionType === UnitType.Frontline) {
+      this.active = false;
+      return;
+    }
+
     if (!this.mg.isValidRef(this.tile)) {
       console.warn(`cannot build construction invalid tile ${this.tile}`);
       this.active = false;

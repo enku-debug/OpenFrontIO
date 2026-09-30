@@ -1370,6 +1370,16 @@ export class UserSettingModal extends BaseModal {
         @change=${this.handleKeybindChange}
       ></setting-keybind>
 
+      <setting-keybind
+        action="buildFrontline"
+        label=${translateText("user_setting.build_frontline")}
+        description=${translateText("user_setting.build_frontline_desc")}
+        defaultKey=${this.defaultKeybinds.buildFrontline}
+        .value=${this.getKeyValue("buildFrontline")}
+        .display=${this.getKeyChar("buildFrontline")}
+        @change=${this.handleKeybindChange}
+      ></setting-keybind>
+
       <h2
         class="text-blue-200 text-xl font-bold mt-8 mb-3 border-b border-white/10 pb-2"
       >

@@ -211,6 +211,8 @@ export enum UnitType {
   Factory = "Factory",
   // Appended last: the wire encodes UnitType by position.
   TankFactory = "Tank Factory",
+  // A node of a drawn Frontline (see FrontlineExecution). Appended last.
+  Frontline = "Frontline",
 }
 
 export enum TrainType {
@@ -241,6 +243,7 @@ export const Structures = unitTypeGroup([
   UnitType.Port,
   UnitType.Factory,
   UnitType.TankFactory,
+  UnitType.Frontline,
 ] as const);
 
 export const BuildMenus = unitTypeGroup([
@@ -315,6 +318,8 @@ export interface UnitParamsMap {
   [UnitType.Factory]: Record<string, never>;
 
   [UnitType.TankFactory]: Record<string, never>;
+
+  [UnitType.Frontline]: Record<string, never>;
 
   [UnitType.MissileSilo]: Record<string, never>;
 
@@ -700,6 +705,8 @@ export interface Player {
     targetTile: TileRef,
     validTiles?: TileRef[] | null,
   ): TileRef | false;
+  // `tile` if a Frontline node may go there (own land near the border).
+  frontlineNodeSpawn(tile: TileRef): TileRef | false;
   buildUnit<T extends UnitType>(
     type: T,
     spawnTile: TileRef,

@@ -55,7 +55,8 @@ export type Intent =
   | TogglePauseIntent
   | UpdateGameConfigIntent
   | ToggleGameStartTimer
-  | BuyTanksIntent;
+  | BuyTanksIntent
+  | BuildFrontlineIntent;
 
 export type AttackIntent = z.infer<typeof AttackIntentSchema>;
 export type CancelAttackIntent = z.infer<typeof CancelAttackIntentSchema>;
@@ -93,6 +94,7 @@ export type ToggleGameStartTimer = z.infer<
   typeof ToggleGameStartTimerIntentSchema
 >;
 export type BuyTanksIntent = z.infer<typeof BuyTanksIntentSchema>;
+export type BuildFrontlineIntent = z.infer<typeof BuildFrontlineIntentSchema>;
 
 export type Turn = z.infer<typeof TurnSchema>;
 export type GameConfig = z.infer<typeof GameConfigSchema>;
@@ -703,6 +705,15 @@ export const BuyTanksIntentSchema = z.object({
   count: zb.uint(),
 });
 
+// Most points a drawn Frontline is sent as (the line is simplified first).
+export const FRONTLINE_MAX_POINTS = 32;
+
+// Build a Frontline along a line drawn on your border (FrontlineExecution).
+export const BuildFrontlineIntentSchema = z.object({
+  type: z.literal("build_frontline"),
+  path: z.array(zb.uint()).min(1).max(FRONTLINE_MAX_POINTS),
+});
+
 export const SpawnIntentSchema = z.object({
   type: z.literal("spawn"),
   // A TileRef indexes the typed-array terrain buffers, so it must be a
@@ -874,6 +885,7 @@ export const IntentSchema = z.discriminatedUnion("type", [
   ToggleGameStartTimerIntentSchema,
   // Appended last: the wire encodes the union member by position.
   BuyTanksIntentSchema,
+  BuildFrontlineIntentSchema,
 ]);
 
 // StampedIntent = Intent with server-stamped clientID (used in turns and execution)

@@ -19,6 +19,7 @@ import {
   cityIcon,
   defensePostIcon,
   factoryIcon,
+  frontlineIcon,
   goldCoinIcon,
   hydrogenBombIcon,
   mirvIcon,
@@ -45,6 +46,7 @@ export class UnitDisplay extends LitElement implements Controller {
   private _defensePost = 0;
   private _samLauncher = 0;
   private _tankFactories = 0;
+  private _frontlines = 0;
   private allDisabled = false;
   private _hoveredUnit: PlayerBuildableUnitType | null = null;
   private tutorialHighlight: PlayerBuildableUnitType | null = null;
@@ -125,6 +127,7 @@ export class UnitDisplay extends LitElement implements Controller {
     this._samLauncher = player.totalUnitLevels(UnitType.SAMLauncher);
     this._factories = player.totalUnitLevels(UnitType.Factory);
     this._tankFactories = player.totalUnitLevels(UnitType.TankFactory);
+    this._frontlines = player.totalUnitLevels(UnitType.Frontline);
     this._warships = player.totalUnitLevels(UnitType.Warship);
     this.requestUpdate();
   }
@@ -180,6 +183,13 @@ export class UnitDisplay extends LitElement implements Controller {
             UnitType.TankFactory,
             "tank_factory",
             this.keybinds["buildTankFactory"]?.key ?? "V",
+          )}
+          ${this.renderUnitItem(
+            frontlineIcon,
+            this._frontlines,
+            UnitType.Frontline,
+            "frontline",
+            this.keybinds["buildFrontline"]?.key ?? "X",
           )}
           ${this.renderUnitItem(
             missileSiloIcon,
