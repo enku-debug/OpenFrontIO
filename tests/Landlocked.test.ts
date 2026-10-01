@@ -36,7 +36,7 @@ describe("Landlocked", () => {
     expect(p.isLandlocked()).toBe(false); // owns nothing yet
     p.conquer(inland);
     expect(p.isLandlocked()).toBe(true);
-    expect(landlockedTrainGold(game, p, 10_000n)).toBe(15_000n);
+    expect(landlockedTrainGold(game, p, 10_000n)).toBe(17_000n);
 
     p.conquer(shore);
     expect(p.isLandlocked()).toBe(false);

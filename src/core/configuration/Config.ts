@@ -564,8 +564,8 @@ export class Config {
   trainSpawnRate(numPlayerFactories: number, numTrainUnits: number): number {
     // hyperbolic decay, midpoint at 10 factories
     // expected number of trains = numPlayerFactories  / trainSpawnRate(numPlayerFactories)
-    // WW3: 12 (OpenFront: 15) — factories send trains 25% more often.
-    const rate = (numPlayerFactories + 10) * 12;
+    // WW3: 13 (OpenFront: 15) — factories send trains ~15% more often.
+    const rate = (numPlayerFactories + 10) * 13;
     return Math.max(1, Math.floor(rate / this.trainSaturation(numTrainUnits)));
   }
 
@@ -596,7 +596,7 @@ export class Config {
 
   /** Train gold multiplier for players with no ocean coast (Player.isLandlocked). */
   landlockedTrainGoldBonus(): number {
-    return 1.5;
+    return 1.7;
   }
 
   trainStationMinRange(): number {
